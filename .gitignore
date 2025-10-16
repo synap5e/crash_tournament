@@ -1,0 +1,9 @@
+**/__pycache__
+.cursor/
+.aidocs/
+output/
+output*/
+*output/
+*crashes/
+*.egg-info/
+.misc/
