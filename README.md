@@ -4,13 +4,17 @@ A TrueSkill-based ranking system for crash reports using adaptive comparative ju
 
 ## Purpose
 
-This system ranks large sets of crash reports (hundreds to thousands) by likely exploitability. Instead of evaluating each crash individually, it compares small groups of crashes (typically 4 at a time) to build a global ranking using the TrueSkill algorithm. By focusing comparisons on crashes with high uncertainty, it minimizes the number of LLM calls needed to achieve confident rankings.
+This system ranks large sets of crash reports (hundreds to thousands) by likely exploitability. Instead of evaluating each crash individually, it compares small groups of crashes (typically 4 at a time) to build a global ranking using the TrueSkill algorithm. The system performs k-way comparisons but converts them to pairwise TrueSkill updates, trading theoretical rigor for efficiency by assuming transitivity and consistent judge accuracy. By focusing comparisons on crashes with high uncertainty, it minimizes the number of LLM calls needed to achieve confident rankings.
 
 ## Approach
 
-We use **TrueSkill** with k-way ordinal comparisons converted to sequential pairwise updates. A configurable **Judge** (typically an LLM-based agent like `cursor-agent`) ranks small groups of crashes, and these ordinal results update TrueSkill ratings (mu/sigma per crash). An **UncertaintySelector** chooses which groups to evaluate next by sampling from crashes with high sigma values, ensuring informative comparisons. The system is **idempotent** and can resume from snapshots.
+We use **TrueSkill** for ranking, but with an important adaptation: while TrueSkill is designed for pairwise comparisons, we perform **k-way ordinal comparisons** (typically 4 crashes at a time) and convert them to sequential pairwise TrueSkill updates. A configurable **Judge** (typically an LLM-based agent like `cursor-agent`) ranks small groups of crashes, and these ordinal results are decomposed into k-1 pairwise comparisons that update TrueSkill ratings (mu/sigma per crash). An **UncertaintySelector** chooses which groups to evaluate next by sampling from crashes with high sigma values, ensuring informative comparisons. 
 
-We do **not** score crashes individually, use graded judgments (yet), or implement complex active learning beyond uncertainty-based sampling.
+**k-way judging:** Instead of evaluating crashes strictly pairwise, we present a group of k crashes to the judge and rank them all at once. To update TrueSkill, we naively convert the k-way ranking into k-1 sequential pairwise updates. This sacrifices some theoretical rigor, because converting a k-way ranking into sequential pairwise updates treats correlated outcomes as independent, which can introduce noise and reduce the probabilistic fidelity of the TrueSkill updates.
+
+The efficiency gain comes from an information-per-call tradeoff: one k-way evaluation produces multiple pairwise updates simultaneously. While each derived pairwise update carries (hopefully only) slightly less reliable information than an independent 2-way call, the total information gained per LLM call can (again, hopefully) exceed that of multiple individual pairwise evaluations. Standard TrueSkill treats each pairwise evaluation as the cost unit. In our setting, the expensive resource is the LLM call; k-way judging reduces the number of costly calls while still providing pairwise-equivalent updates for TrueSkill to converge. Even if convergence requires more pairwise updates (due to lower quality pairwise judmgenets to k=2), it should require fewer LLM calls.
+
+For k=2, this reduces to standard TrueSkill with a single pairwise comparison per evaluation.
 
 ## Usage
 
@@ -47,6 +51,13 @@ uv run python -m crash_tournament \
     --judge-type cursor-agent \
     --seed-groups 20
 
+# Stop when uncertainty drops below 0.1
+uv run python -m crash_tournament \
+    --crashes-dir ./crashes \
+    --output-dir ./output \
+    --judge-type cursor-agent \
+    --uncertainty-threshold 0.1
+
 # Use custom pattern for different file types
 uv run python -m crash_tournament \
     --crashes-dir ./crashes \
@@ -67,8 +78,8 @@ uv run python -m crash_tournament \
 - `--groups-per-round`: Groups per uncertainty round (default: 50)
 - `--workers`: Number of worker threads (default: 1)
 - `--resume`: Load snapshot and continue from previous run
+- `--uncertainty-threshold`: Stop tournament when average uncertainty drops below this threshold (default: run until budget exhausted)
 - `--debug`: Enable debug logging
-- `--verbose`: Show detailed console output with file:line info
 
 ## Architecture
 
@@ -105,6 +116,12 @@ The system uses dependency injection to wire together swappable components:
 - `get_uncertainty(crash_id) -> float`: Get sigma (uncertainty)
 - `snapshot() -> dict` / `load_snapshot(state: dict)`: Serialize/deserialize state
 - Implementation: `TrueSkillRanker` (k-way → k-1 pairwise conversions, configurable weight parameter, default 1/(k-1))
+
+**Important:** TrueSkill is fundamentally a pairwise rating system, but we perform k-way comparisons for efficiency. Each k-way comparison is converted to k-1 sequential pairwise TrueSkill updates (e.g., a 4-way comparison becomes 3 pairwise updates: 1st vs 2nd, 2nd vs 3rd, 3rd vs 4th). The weight parameter (default 1/(k-1)) prevents overconfidence from treating k-1 pairwise updates as k-1 independent comparisons.
+
+**Tradeoffs:** This approach assumes transitivity and consistent judge accuracy across the k-way comparison, which may introduce noise. The benefit is fewer LLM calls for convergence, but at the cost of potential ranking errors from these assumptions.
+
+**Special case k=2:** When k=2, the system simplifies to true TrueSkill with exactly one pairwise comparison per evaluation, making it equivalent to standard TrueSkill usage.
 
 **`Selector`** — Decides which crash groups to evaluate next
 - `next_groups(all_crash_ids: Sequence[str], k: int, budget: int) -> Sequence[Sequence[str]]`: Generate groups
@@ -194,7 +211,7 @@ Adaptive sampling algorithm that minimizes evaluations while maximizing informat
 
 - **Crashes as black boxes**: The tournament system treats crashes as file paths without parsing content. Judges read file content directly as needed.
 - **Synchronous interfaces**: All components use synchronous methods. Concurrency is handled by the orchestrator's thread pool.
-- **Weighted updates**: k-way comparisons are converted to k-1 pairwise updates with weight=1/(k-1) to avoid overconfidence.
+- **TrueSkill adaptation**: k-way comparisons are converted to k-1 pairwise TrueSkill updates with weight=1/(k-1) to avoid overconfidence. This trades theoretical rigor for efficiency by assuming transitivity and consistent judge accuracy across k-way comparisons.
 - **Idempotency**: System can resume from snapshots without re-evaluating groups.
 - **Pluggable components**: All interfaces are abstract; swap implementations without changing orchestrator logic.
 
