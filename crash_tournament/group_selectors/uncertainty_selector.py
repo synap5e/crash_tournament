@@ -19,14 +19,13 @@ class UncertaintySelector(Selector):
     Uncertainty-based selector for active learning.
     
     Selects groups by focusing on high-uncertainty crashes and
-    sampling nearby crashes for informative comparisons.
+    filling groups with random crashes for comparison.
     """
     
     def __init__(
         self,
         ranker: Ranker,
         K_uncertain: Optional[int] = None,
-        delta_mu: float = 1.0,
         max_evals_per_crash: Optional[int] = None,
         temperature: float = 1.0,
     ):
@@ -36,12 +35,10 @@ class UncertaintySelector(Selector):
         Args:
             ranker: Ranker instance for querying mu/sigma
             K_uncertain: Number of uncertain candidates to consider (default: 5*k)
-            delta_mu: Maximum mu difference for nearby crashes
             max_evals_per_crash: Maximum evaluations per crash (None = unlimited)
             temperature: Temperature parameter for probabilistic sampling (T=1.0 = proportional to σ, T<1.0 = more greedy, T>1.0 = more diverse)
         """
         self.ranker = ranker
-        self.delta_mu = delta_mu
         self.max_evals_per_crash = max_evals_per_crash
         self.temperature = temperature
         
@@ -55,7 +52,7 @@ class UncertaintySelector(Selector):
         from ..logging_config import get_logger
         self.logger = get_logger("uncertainty_selector")
     
-    def _get_uncertainty_scores(self, crash_ids: List[str]) -> List[tuple[str, float]]:
+    def _get_uncertainty_scores(self, crash_ids: Sequence[str]) -> List[tuple[str, float]]:
         """Get uncertainty scores for all crashes."""
         scores = []
         for crash_id in crash_ids:
@@ -67,7 +64,7 @@ class UncertaintySelector(Selector):
         """
         Sample crashes probabilistically based on uncertainty scores.
         
-        Uses temperature-scaled softmax: p_i = (σ_i)^(1/T) / Σ_j (σ_j)^(1/T)
+        Uses temperature-controlled power-based normalization: p_i = (σ_i + ε)^(1/T) / Σ_j (σ_j + ε)^(1/T)
         
         Args:
             uncertainty_scores: List of (crash_id, sigma) tuples
@@ -82,7 +79,7 @@ class UncertaintySelector(Selector):
         # Extract sigma values
         sigmas = np.array([score for _, score in uncertainty_scores])
         
-        # Apply temperature scaling: (σ + ε)^(1/T) for numerical stability
+        # Apply temperature-controlled power law: (σ + ε)^(1/T) for numerical stability
         if self.temperature > 0:
             scaled_sigmas = np.power(sigmas + EPSILON, 1.0 / self.temperature)
         else:
@@ -95,7 +92,7 @@ class UncertaintySelector(Selector):
             chosen_idx = min(max_indices, key=lambda idx: crash_ids[idx])
             scaled_sigmas[chosen_idx] = 1.0
         
-        # Convert to probabilities (power-based normalization)
+        # Convert to probabilities (power law normalization)
         if np.sum(scaled_sigmas) > 0:
             probabilities = scaled_sigmas / np.sum(scaled_sigmas)
         else:
@@ -122,21 +119,10 @@ class UncertaintySelector(Selector):
             # Fallback to uniform sampling if probabilities are invalid
             return random.sample(crash_ids, k)
     
-    def _get_nearby_crashes(self, target_crash_id: str, all_crash_ids: List[str], k: int) -> List[str]:
-        """Get crashes with mu near target crash's mu."""
-        target_mu = self.ranker.get_score(target_crash_id)
-        nearby_crashes = []
-        
-        for crash_id in all_crash_ids:
-            if crash_id == target_crash_id:
-                continue
-            
-            mu = self.ranker.get_score(crash_id)
-            if abs(mu - target_mu) <= self.delta_mu:
-                nearby_crashes.append(crash_id)
-        
-        # Sample up to k-1 nearby crashes
-        return random.sample(nearby_crashes, min(k - 1, len(nearby_crashes)))
+    def _get_random_crashes(self, target_crash_id: str, all_crash_ids: List[str], k: int) -> List[str]:
+        """Get random crashes to fill out the group."""
+        other_crashes = [c for c in all_crash_ids if c != target_crash_id]
+        return random.sample(other_crashes, min(k - 1, len(other_crashes)))
     
     def _is_crash_over_evaluated(self, crash_id: str) -> bool:
         """Check if crash has been evaluated too many times."""
@@ -149,7 +135,7 @@ class UncertaintySelector(Selector):
         for crash_id in group:
             self.eval_counts[crash_id] = self.eval_counts.get(crash_id, 0) + 1
     
-    def _generate_unique_group(self, uncertain_candidates: List[str], all_crash_ids: List[str], k: int) -> Optional[List[str]]:
+    def _generate_unique_group(self, uncertain_candidates: List[str], all_crash_ids: Sequence[str], k: int) -> Optional[List[str]]:
         """Generate a unique group avoiding over-evaluated crashes."""
         # Filter out over-evaluated crashes
         available_candidates = [
@@ -170,19 +156,19 @@ class UncertaintySelector(Selector):
         # Select from available candidates (prioritizing uncertain ones if available)
         target_crash = available_candidates[0]
         
-        # Get nearby crashes (excluding over-evaluated ones)
-        nearby_crashes = self._get_nearby_crashes(target_crash, all_crash_ids, k)
-        nearby_crashes = [c for c in nearby_crashes if not self._is_crash_over_evaluated(c)]
+        # Get random crashes to fill out the group (excluding over-evaluated ones)
+        other_crashes = [c for c in all_crash_ids if c != target_crash and not self._is_crash_over_evaluated(c)]
+        random_crashes = random.sample(other_crashes, min(k-1, len(other_crashes)))
         
         # Build group
         group = [target_crash]
-        group.extend(nearby_crashes[:k-1])  # Take up to k-1 nearby crashes
+        group.extend(random_crashes)
         
         # Log group selection details
         target_uncertainty = self.ranker.get_uncertainty(target_crash)
         self.logger.info(f"Selected group: {group}")
         self.logger.info(f"  Target crash: {target_crash} (σ: {target_uncertainty:.2f})")
-        self.logger.info(f"  Nearby crashes: {nearby_crashes[:k-1]}")
+        self.logger.info(f"  Random crashes: {random_crashes}")
         
         # Fill with random crashes if needed
         if len(group) < k:
@@ -210,7 +196,7 @@ class UncertaintySelector(Selector):
         1. Get mu/sigma for all crashes, compute uncertainty score u = sigma
         2. Select top K_uncertain candidates
         3. For each group: sample 1 highest-uncertainty item, fill remaining k-1 items
-           by sampling crashes with mu near selected item (within delta_mu)
+           with random crashes for comparison
         4. Ensure group uniqueness and limited overlap
         """
         if not all_crash_ids:

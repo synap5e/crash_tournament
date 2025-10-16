@@ -42,7 +42,7 @@ def create_crash_from_path(filepath: str) -> Crash:
     )
 
 
-def create_judge(judge_type: str, timeout: float = 500.0, prompt_file: str = None):
+def create_judge(judge_type: str, timeout: float = 500.0, prompt_file: str | None = None):
     """Create a judge instance based on type."""
     if judge_type == "cursor_agent":
         return CursorAgentJudge(timeout=timeout, prompt_file=prompt_file)
@@ -125,10 +125,11 @@ Examples:
     if len(args.crash_files) < 2:
         parser.error("At least 2 crash files are required for ranking")
     
+    # Setup logging
+    setup_logging(level=args.log_level, debug=args.debug)
+    logger = get_logger("rank_crashes_demo")
+    
     try:
-        # Setup logging
-        setup_logging(level=args.log_level, debug=args.debug)
-        logger = get_logger("rank_crashes_demo")
         
         logger.info("Starting crash ranking demo")
         
@@ -160,9 +161,14 @@ Examples:
         if args.judge in ["cursor_agent", "cursor_agent_streaming"]:
             print("Testing cursor-agent connection...")
             logger.info("Testing cursor-agent connection")
-            judge.test_connection()
-            logger.info("Cursor-agent connection successful")
-            print("  ✓ Connection successful")
+            if hasattr(judge, 'test_connection'):
+                test_method = getattr(judge, 'test_connection')
+                test_method()
+                logger.info("Cursor-agent connection successful")
+                print("  ✓ Connection successful")
+            else:
+                logger.warning("Judge does not support connection testing")
+                print("  ⚠ Connection testing not available")
         
         print()
         

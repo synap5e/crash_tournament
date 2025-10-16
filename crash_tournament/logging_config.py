@@ -50,7 +50,7 @@ def setup_logging(level: str = "INFO", debug: bool = False) -> None:
         )
 
 
-def get_logger(name: str = None):
+def get_logger(name: str | None = None):
     """
     Get a logger instance.
     

@@ -10,6 +10,9 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence
+from pathlib import Path
+
+from prettytable import PrettyTable
 
 from .interfaces import CrashFetcher, Judge, Storage, Ranker, Selector
 from .models import Crash, OrdinalResult
@@ -53,7 +56,7 @@ class Orchestrator:
         ranker: Ranker,
         selector: Selector,
         config: RunConfig,
-        output_dir = None,
+        output_dir: Optional[Path] = None,
     ):
         """Initialize orchestrator with dependency injection."""
         self.fetcher = fetcher
@@ -67,6 +70,11 @@ class Orchestrator:
         # Runtime state
         self.evaluated_groups = 0
         self.current_round = 0
+        
+        # Phase tracking
+        self.seed_evaluations = 0  # Evaluations during seed phase
+        self.adaptive_evaluations = 0  # Evaluations during adaptive phase
+        self.in_seed_phase = True  # Track current phase
         
         # Exception tolerance tracking
         self.total_evaluations = 0  # Total attempted (including failures)
@@ -150,6 +158,16 @@ class Orchestrator:
                     self.ranker.update_with_ordinal(result, weight=self.config.weight_scale)
                     results.append(result)
                     self.evaluated_groups += 1
+                    
+                    # Track per-phase evaluations
+                    if self.in_seed_phase:
+                        self.seed_evaluations += 1
+                    else:
+                        self.adaptive_evaluations += 1
+                    
+                    # Track per-crash phase evaluations
+                    for crash_id in group:
+                        self.ranker.track_evaluation_by_phase(crash_id, self.in_seed_phase)
                     
                     # Check for milestone (multiple of 50)
                     self._check_and_print_milestone()
@@ -262,6 +280,9 @@ class Orchestrator:
                 'total_evaluations': self.total_evaluations,
                 'failed_evaluations': self.failed_evaluations,
                 'last_milestone': self.last_milestone,
+                'seed_evaluations': self.seed_evaluations,
+                'adaptive_evaluations': self.adaptive_evaluations,
+                'in_seed_phase': self.in_seed_phase,
             }
         }
         self.storage.save_snapshot(snapshot)
@@ -301,6 +322,8 @@ class Orchestrator:
         runtime_table.align["Value"] = "r"
         
         runtime_table.add_row(["Evaluated Groups", f"{self.evaluated_groups:,}"])
+        runtime_table.add_row(["Seed Evaluations", f"{self.seed_evaluations:,}"])
+        runtime_table.add_row(["Adaptive Evaluations", f"{self.adaptive_evaluations:,}"])
         runtime_table.add_row(["Current Round", f"{self.current_round:,}"])
         runtime_table.add_row(["Total Evaluations", f"{self.total_evaluations:,}"])
         runtime_table.add_row(["Failed Evaluations", f"{self.failed_evaluations:,}"])
@@ -399,12 +422,22 @@ class Orchestrator:
         progress_table.add_row([
             "Phase", 
             phase, 
-            "Seed" if self.evaluated_groups < self.config.seed_groups else "Adaptive"
+            "Seed" if self.in_seed_phase else "Adaptive"
         ])
         progress_table.add_row([
             "Budget Progress", 
             f"{self.evaluated_groups}/{self.config.budget} ({budget_progress:.1f}%)",
             f"{remaining_budget} remaining"
+        ])
+        progress_table.add_row([
+            "Seed Evaluations", 
+            f"{self.seed_evaluations}",
+            f"Random sampling phase"
+        ])
+        progress_table.add_row([
+            "Adaptive Evaluations", 
+            f"{self.adaptive_evaluations}",
+            f"Uncertainty-based sampling"
         ])
         progress_table.add_row([
             "Current Round", 
@@ -499,20 +532,33 @@ class Orchestrator:
             # Get all rankings
             rankings = self._get_final_rankings()
             
+            # Print milestone summary
+            print(f"Milestone Summary:")
+            milestone_table = PrettyTable()
+            milestone_table.field_names = ["Metric", "Value"]
+            milestone_table.align["Metric"] = "l"
+            milestone_table.align["Value"] = "r"
+            milestone_table.add_row(["Total Evaluations", f"{self.evaluated_groups:,}"])
+            milestone_table.add_row(["Seed Evaluations", f"{self.seed_evaluations:,}"])
+            milestone_table.add_row(["Adaptive Evaluations", f"{self.adaptive_evaluations:,}"])
+            milestone_table.add_row(["Current Phase", "Seed" if self.in_seed_phase else "Adaptive"])
+            print(milestone_table)
+            
             # Print full rankings table
-            from prettytable import PrettyTable
             table = PrettyTable()
-            table.field_names = ["Rank", "Crash ID", "Score", "Uncertainty", "Evals", "Win%", "Avg Rank"]
+            table.field_names = ["Rank", "Crash ID", "Score", "Uncertainty", "Seed Evals", "Adaptive Evals", "Win%", "Avg Rank"]
             table.align["Rank"] = "r"
             table.align["Score"] = "r"
             table.align["Uncertainty"] = "r"
-            table.align["Evals"] = "r"
+            table.align["Seed Evals"] = "r"
+            table.align["Adaptive Evals"] = "r"
             table.align["Win%"] = "r"
             table.align["Avg Rank"] = "r"
             
             for i, (crash_id, score) in enumerate(rankings.items(), 1):
                 uncertainty = self.ranker.get_uncertainty(crash_id)
-                eval_count = self.ranker.get_eval_count(crash_id)
+                seed_evals = self.ranker.get_seed_eval_count(crash_id)
+                adaptive_evals = self.ranker.get_adaptive_eval_count(crash_id)
                 win_pct = self.ranker.get_win_percentage(crash_id)
                 avg_rank = self.ranker.get_average_ranking(crash_id)
                 table.add_row([
@@ -520,7 +566,8 @@ class Orchestrator:
                     crash_id, 
                     f"{score:.3f}",
                     f"{uncertainty:.3f}",
-                    eval_count,
+                    seed_evals,
+                    adaptive_evals,
                     f"{win_pct:.1f}%",
                     f"{avg_rank:.1f}"
                 ])
@@ -539,6 +586,8 @@ class Orchestrator:
         from pathlib import Path
         import shutil
         
+        if self.output_dir is None:
+            raise ValueError("output_dir must be set to create ranked directory")
         ranked_dir = self.output_dir / "ranked"
         
         # Clear existing directory
@@ -586,6 +635,9 @@ class Orchestrator:
                 self.total_evaluations = runtime_state.get('total_evaluations', 0)
                 self.failed_evaluations = runtime_state.get('failed_evaluations', 0)
                 self.last_milestone = runtime_state.get('last_milestone', 0)
+                self.seed_evaluations = runtime_state.get('seed_evaluations', 0)
+                self.adaptive_evaluations = runtime_state.get('adaptive_evaluations', 0)
+                self.in_seed_phase = runtime_state.get('in_seed_phase', True)
             else:
                 # Old format (backwards compatibility)
                 self.ranker.load_snapshot(snapshot)
@@ -601,6 +653,9 @@ class Orchestrator:
         
         # Show progress after seed phase
         self._print_progress("Seed Phase Complete", "Initial random evaluations completed")
+        
+        # Transition to adaptive phase
+        self.in_seed_phase = False
         
         # Uncertainty rounds
         self.logger.info("Running uncertainty rounds")
@@ -632,7 +687,7 @@ class Orchestrator:
         
         return self._get_final_rankings()
     
-    def _get_top_scores(self, n: int = 5) -> List[tuple]:
+    def _get_top_scores(self, n: int = 5) -> List[tuple[str, float, float]]:
         """Get top N crash scores for logging."""
         crashes = list(self.fetcher.list_crashes())
         scores = []

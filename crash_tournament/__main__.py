@@ -111,6 +111,12 @@ def parse_args():
         default="INFO",
         help="Set logging level (default: INFO)"
     )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=1.0,
+        help="Temperature for probabilistic uncertainty sampling (default: 1.0, lower=focuses on highest uncertainty, higher=flattens uncertainty weighting)"
+    )
     
     return parser.parse_args()
 
@@ -168,7 +174,7 @@ def wire_components(args):
     
     # Create selector
     logger.info("Creating uncertainty selector")
-    selector = UncertaintySelector(ranker)
+    selector = UncertaintySelector(ranker, temperature=args.temperature)
     
     # Create judge based on type
     logger.info(f"Creating {args.judge_type} judge")
@@ -275,6 +281,7 @@ def main():
         print(f"Budget: {args.budget}")
         print(f"Workers: {args.workers}")
         print(f"Resume: {args.resume}")
+        print(f"Temperature: {args.temperature}")
         print(f"Judge type: {args.judge_type}")
         if args.judge_type == "cursor-agent":
             print(f"Using cursor-agent judge")
@@ -309,25 +316,31 @@ def main():
         print("\nFinal Rankings:")
         print("-" * 40)
         
-        # Use prettytable for nice formatting
+        # Use prettytable for nice formatting (consistent with milestone updates)
         from prettytable import PrettyTable
         table = PrettyTable()
-        table.field_names = ["Rank", "Crash ID", "Score", "Evals", "Win%", "Avg Rank"]
+        table.field_names = ["Rank", "Crash ID", "Score", "Uncertainty", "Seed Evals", "Adaptive Evals", "Win%", "Avg Rank"]
         table.align["Rank"] = "r"
         table.align["Score"] = "r"
-        table.align["Evals"] = "r"
+        table.align["Uncertainty"] = "r"
+        table.align["Seed Evals"] = "r"
+        table.align["Adaptive Evals"] = "r"
         table.align["Win%"] = "r"
         table.align["Avg Rank"] = "r"
         
         for i, (crash_id, score) in enumerate(rankings.items(), 1):
-            eval_count = orchestrator.ranker.get_eval_count(crash_id)
+            uncertainty = orchestrator.ranker.get_uncertainty(crash_id)
+            seed_evals = orchestrator.ranker.get_seed_eval_count(crash_id)
+            adaptive_evals = orchestrator.ranker.get_adaptive_eval_count(crash_id)
             win_pct = orchestrator.ranker.get_win_percentage(crash_id)
             avg_rank = orchestrator.ranker.get_average_ranking(crash_id)
             table.add_row([
                 i, 
                 crash_id, 
                 f"{score:.3f}",
-                eval_count,
+                f"{uncertainty:.3f}",
+                seed_evals,
+                adaptive_evals,
                 f"{win_pct:.1f}%",
                 f"{avg_rank:.1f}"
             ])

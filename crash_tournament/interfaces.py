@@ -5,7 +5,7 @@ All interfaces are synchronous to avoid asyncio complexity in core interfaces.
 """
 
 from abc import ABC, abstractmethod
-from typing import Iterable, Sequence, Optional
+from typing import Iterable, Sequence, Optional, Any
 from .models import Crash, OrdinalResult, GradedResult
 
 
@@ -62,7 +62,7 @@ class Storage(ABC):
         pass
 
     @abstractmethod
-    def save_snapshot(self, state: dict) -> None:
+    def save_snapshot(self, state: dict[str, Any]) -> None:
         """
         Save system state snapshot.
         
@@ -71,7 +71,7 @@ class Storage(ABC):
         pass
 
     @abstractmethod
-    def load_snapshot(self) -> Optional[dict]:
+    def load_snapshot(self) -> Optional[dict[str, Any]]:
         """Load system state snapshot."""
         pass
 
@@ -99,13 +99,43 @@ class Ranker(ABC):
         pass
 
     @abstractmethod
-    def snapshot(self) -> dict:
+    def snapshot(self) -> dict[str, Any]:
         """Export current ranking state."""
         pass
 
     @abstractmethod
-    def load_snapshot(self, state: dict) -> None:
+    def load_snapshot(self, state: dict[str, Any]) -> None:
         """Load ranking state from snapshot."""
+        pass
+
+    @abstractmethod
+    def track_evaluation_by_phase(self, crash_id: str, is_seed_phase: bool) -> None:
+        """Track evaluation count by phase."""
+        pass
+
+    @abstractmethod  
+    def get_eval_count(self, crash_id: str) -> int:
+        """Get total evaluation count for a crash."""
+        pass
+
+    @abstractmethod
+    def get_seed_eval_count(self, crash_id: str) -> int:
+        """Get number of times crash was evaluated in seed phase."""
+        pass
+
+    @abstractmethod
+    def get_adaptive_eval_count(self, crash_id: str) -> int:
+        """Get number of times crash was evaluated in adaptive phase."""
+        pass
+
+    @abstractmethod
+    def get_win_percentage(self, crash_id: str) -> float:
+        """Get win percentage for a crash."""
+        pass
+
+    @abstractmethod
+    def get_average_ranking(self, crash_id: str) -> float:
+        """Get average ranking for a crash."""
         pass
 
 

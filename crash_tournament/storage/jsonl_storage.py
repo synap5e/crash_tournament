@@ -7,7 +7,7 @@ Persists observations to JSONL file and snapshots to JSON file with checksums.
 import json
 import os
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Iterable, Optional, Any
 
 from ..interfaces import Storage
 from ..models import OrdinalResult
@@ -91,7 +91,7 @@ class JSONLStorage(Storage):
                     self.logger.warning(f"Skipping corrupted JSON line in {self.observations_path}")
                     continue
     
-    def save_snapshot(self, state: dict) -> None:
+    def save_snapshot(self, state: dict[str, Any]) -> None:
         """Save system state snapshot to JSON (idempotent write)."""
         self.logger.info(f"Saving snapshot with {len(state)} items to {self.snapshot_path}")
         
@@ -101,7 +101,7 @@ class JSONLStorage(Storage):
         
         self.logger.debug("Snapshot saved successfully")
     
-    def load_snapshot(self) -> Optional[dict]:
+    def load_snapshot(self) -> Optional[dict[str, Any]]:
         """Load system state snapshot from JSON."""
         if not self.snapshot_path.exists():
             self.logger.debug("No snapshot file exists")

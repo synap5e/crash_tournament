@@ -5,7 +5,7 @@ Defines Crash, OrdinalResult, and GradedResult models with validation.
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 import time
 
 
@@ -31,7 +31,7 @@ class OrdinalResult:
     
     ordered_ids: List[str]
     raw_output: str
-    parsed_result: dict
+    parsed_result: dict[str, Any]
     timestamp: float = field(default_factory=time.time)
     judge_id: str = "unknown"
     group_size: int = 0
@@ -50,7 +50,7 @@ class GradedResult:
     
     grades: Dict[str, float]
     raw_output: str
-    parsed_result: dict
+    parsed_result: dict[str, Any]
     timestamp: float = field(default_factory=time.time)
     judge_id: str = "unknown"
     group_size: int = 0

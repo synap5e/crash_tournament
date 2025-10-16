@@ -6,7 +6,7 @@ Uses trueskill package with k-way to pairwise conversion and proper weighting.
 
 import random
 import threading
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 
 from trueskill import Rating, rate_1vs1, setup
 
@@ -41,6 +41,8 @@ class TrueSkillRanker(Ranker):
         
         # Statistics tracking
         self.eval_counts: Dict[str, int] = {}  # How many times each crash was evaluated
+        self.seed_eval_counts: Dict[str, int] = {}  # How many times each crash was evaluated in seed phase
+        self.adaptive_eval_counts: Dict[str, int] = {}  # How many times each crash was evaluated in adaptive phase
         self.win_counts: Dict[str, int] = {}    # How many times each crash won
         self.rankings: Dict[str, List[int]] = {}  # All rankings for each crash
         self.group_sizes: Dict[str, List[int]] = {}  # Group sizes for each evaluation
@@ -61,6 +63,14 @@ class TrueSkillRanker(Ranker):
             self.ratings[crash_id] = Rating(mu=self.mu, sigma=self.sigma)
         return self.ratings[crash_id]
     
+    def track_evaluation_by_phase(self, crash_id: str, is_seed_phase: bool) -> None:
+        """Track that a crash was evaluated in a specific phase."""
+        with self._lock:
+            if is_seed_phase:
+                self.seed_eval_counts[crash_id] = self.seed_eval_counts.get(crash_id, 0) + 1
+            else:
+                self.adaptive_eval_counts[crash_id] = self.adaptive_eval_counts.get(crash_id, 0) + 1
+
     def update_with_ordinal(self, res: OrdinalResult, weight: float = 1.0) -> None:
         """
         Update rankings with ordinal result using k-way to pairwise conversion.
@@ -136,7 +146,7 @@ class TrueSkillRanker(Ranker):
         rating = self._get_or_create_rating(crash_id)
         return rating.sigma
     
-    def snapshot(self) -> dict:
+    def snapshot(self) -> dict[str, Any]:
         """Export current ranking state as serializable dict."""
         return {
             "ratings": {
@@ -148,16 +158,20 @@ class TrueSkillRanker(Ranker):
             },
             "statistics": {
                 "eval_counts": self.eval_counts,
+                "seed_eval_counts": self.seed_eval_counts,
+                "adaptive_eval_counts": self.adaptive_eval_counts,
                 "win_counts": self.win_counts,
                 "rankings": self.rankings,
                 "group_sizes": self.group_sizes
             }
         }
     
-    def load_snapshot(self, state: dict) -> None:
+    def load_snapshot(self, state: dict[str, Any]) -> None:
         """Load ranking state from snapshot."""
         self.ratings.clear()
         self.eval_counts.clear()
+        self.seed_eval_counts.clear()
+        self.adaptive_eval_counts.clear()
         self.win_counts.clear()
         self.rankings.clear()
         self.group_sizes.clear()
@@ -168,6 +182,8 @@ class TrueSkillRanker(Ranker):
             ratings_data = state["ratings"]
             statistics = state.get("statistics", {})
             self.eval_counts = statistics.get("eval_counts", {})
+            self.seed_eval_counts = statistics.get("seed_eval_counts", {})
+            self.adaptive_eval_counts = statistics.get("adaptive_eval_counts", {})
             self.win_counts = statistics.get("win_counts", {})
             self.rankings = statistics.get("rankings", {})
             self.group_sizes = statistics.get("group_sizes", {})
@@ -192,6 +208,14 @@ class TrueSkillRanker(Ranker):
     def get_eval_count(self, crash_id: str) -> int:
         """Get evaluation count for a crash."""
         return self.eval_counts.get(crash_id, 0)
+    
+    def get_seed_eval_count(self, crash_id: str) -> int:
+        """Get number of times crash was evaluated in seed phase."""
+        return self.seed_eval_counts.get(crash_id, 0)
+    
+    def get_adaptive_eval_count(self, crash_id: str) -> int:
+        """Get number of times crash was evaluated in adaptive phase."""
+        return self.adaptive_eval_counts.get(crash_id, 0)
     
     def get_win_percentage(self, crash_id: str) -> float:
         """Get win percentage for a crash."""

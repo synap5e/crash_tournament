@@ -8,7 +8,7 @@ import json
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import List, Sequence
+from typing import List, Sequence, Any
 
 from ..interfaces import Judge, JudgeError
 from ..models import Crash, OrdinalResult
@@ -37,7 +37,7 @@ class CursorAgentJudge(Judge):
     Uses cursor-agent's -p flag for inline prompts.
     """
     
-    def __init__(self, timeout: float = 300.0, prompt_file: str = None):
+    def __init__(self, timeout: float = 300.0, prompt_file: str | Path | None = None):
         """
         Initialize Cursor Agent judge.
         
@@ -54,7 +54,7 @@ class CursorAgentJudge(Judge):
             prompt_file = Path(__file__).parent.parent / "prompts" / "ordinal_judge.md"
         self.prompt_file = Path(prompt_file)
     
-    def evaluate_group(self, crashes: Sequence[Crash]) -> OrdinalResult:
+    def evaluate_group(self, crashes: Sequence[Crash], *, grading: bool = False) -> OrdinalResult:
         """
         Evaluate a group of crashes using cursor-agent.
         
@@ -253,7 +253,7 @@ class CursorAgentJudge(Judge):
             # If we can't parse the activities, just log a warning and continue
             self.logger.debug(f"Could not parse agent activities from output: {e}")
     
-    def _extract_json_from_output(self, output: str) -> dict:
+    def _extract_json_from_output(self, output: str) -> dict[str, Any]:
         """
         Extract JSON from cursor-agent output.
         

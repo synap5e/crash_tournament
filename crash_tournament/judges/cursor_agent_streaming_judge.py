@@ -30,7 +30,7 @@ class CursorAgentStreamingJudge(CursorAgentJudge):
     for real-time progress updates.
     """
     
-    def __init__(self, timeout: float = 300.0, prompt_file: str = None):
+    def __init__(self, timeout: float = 300.0, prompt_file: str | None = None):
         """
         Initialize Cursor Agent Streaming judge.
         
@@ -65,8 +65,9 @@ class CursorAgentStreamingJudge(CursorAgentJudge):
         ]
         
         # Log the command being executed
-        self.logger.info(f"Running cursor-agent command: {' '.join(cmd)}")
-        self.logger.debug(f"Full prompt: {prompt}")
+        prompt_preview = prompt[:100] + "..." if len(prompt) > 100 else prompt
+        self.logger.info(f"Running cursor-agent command: cursor-agent --output-format=stream-json -p {repr(prompt_preview)} ({len(prompt)} chars)")
+        self.logger.debug(f"Full prompt: {repr(prompt)}")
         
         # Start cursor-agent process with streaming output
         process = subprocess.Popen(
@@ -82,6 +83,7 @@ class CursorAgentStreamingJudge(CursorAgentJudge):
         
         try:
             # Process streaming output line by line
+            assert process.stdout is not None  # We set stdout=subprocess.PIPE
             for line in process.stdout:
                 # Check timeout
                 if time.time() - start_time > self.timeout:
@@ -97,9 +99,11 @@ class CursorAgentStreamingJudge(CursorAgentJudge):
                         for item in content:
                             if item.get("type") == "text":
                                 text = item.get("text", "")
-                                # Log full agent thinking with pretty formatting
+                                # Log full agent thinking with repr to avoid line breaks
                                 if text:
-                                    self.logger.info(f"Agent: {text}")
+                                    text_preview = text[:100] + "..." if len(text) > 100 else text
+                                    self.logger.info(f"Agent: {repr(text_preview)} ({len(text)} chars)")
+                                    self.logger.debug(f"Full agent response: {repr(text)}")
                     
                     elif msg.get("type") == "tool_call":
                         if msg.get("subtype") == "started":
@@ -117,7 +121,7 @@ class CursorAgentStreamingJudge(CursorAgentJudge):
                             if len(args) > 3:
                                 arg_summary += "..."
                                 
-                            self.logger.info(f"Tool: {tool_name}({arg_summary})")
+                            self.logger.debug(f"Tool: {tool_name}({arg_summary})")
                         elif msg.get("subtype") == "completed":
                             tool_call_data = msg.get("tool_call", {})
                             tool_name = next((k.replace('ToolCall', '') for k in tool_call_data.keys() 
@@ -132,23 +136,36 @@ class CursorAgentStreamingJudge(CursorAgentJudge):
                                     success_data = result["success"]
                                     if "files" in success_data:
                                         file_count = success_data.get('totalFiles', len(success_data.get('files', [])))
-                                        self.logger.info(f"Tool {tool_name} => found {file_count} files")
+                                        self.logger.debug(f"Tool {tool_name} => found {file_count} files")
                                     elif "content" in success_data:
                                         content = success_data.get("content", "")
                                         lines = content.split('\n')
                                         total_lines = success_data.get("totalLines", len(lines))
                                         
-                                        # Just show the line count, no content preview
-                                        self.logger.info(f"Tool {tool_name} => {total_lines} lines")
+                                        # Show content if short (< 10 lines), else first & last 5 lines
+                                        if total_lines <= 10:
+                                            # Truncate super long lines (> 200 chars)
+                                            display_lines = [line[:200] + "..." if len(line) > 200 else line 
+                                                           for line in lines]
+                                            content_preview = '\n'.join(display_lines)
+                                            self.logger.debug(f"Tool {tool_name} => {total_lines} lines:\n{content_preview}")
+                                        else:
+                                            # Show first 5 and last 5 lines with truncation
+                                            first_5 = [line[:200] + "..." if len(line) > 200 else line 
+                                                      for line in lines[:5]]
+                                            last_5 = [line[:200] + "..." if len(line) > 200 else line 
+                                                     for line in lines[-5:]]
+                                            content_preview = '\n'.join(first_5) + '\n...\n' + '\n'.join(last_5)
+                                            self.logger.debug(f"Tool {tool_name} => {total_lines} lines (showing first & last 5):\n{content_preview}")
                                     else:
-                                        self.logger.info(f"Tool {tool_name} => success")
+                                        self.logger.debug(f"Tool {tool_name} => success")
                                 elif "error" in result:
                                     error_msg = result['error'].get('errorMessage', 'unknown')
-                                    self.logger.info(f"Tool {tool_name} => error: {error_msg}")
+                                    self.logger.debug(f"Tool {tool_name} => error: {error_msg}")
                                 else:
-                                    self.logger.info(f"Tool {tool_name} => completed")
+                                    self.logger.debug(f"Tool {tool_name} => completed")
                             else:
-                                self.logger.info(f"Tool {tool_name} => completed")
+                                self.logger.debug(f"Tool {tool_name} => completed")
                     
                     # Capture final result
                     elif msg.get("type") == "result":
