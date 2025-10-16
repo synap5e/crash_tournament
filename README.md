@@ -8,7 +8,7 @@ This system ranks large sets of crash reports (hundreds to thousands) by likely 
 
 ## Approach
 
-We use **TrueSkill** for ranking, but with an important adaptation: while TrueSkill is designed for pairwise comparisons, we perform **k-way ordinal comparisons** (typically 4 crashes at a time) and convert them to sequential pairwise TrueSkill updates. A configurable **Judge** (typically an LLM-based agent like `cursor-agent`) ranks small groups of crashes, and these ordinal results are decomposed into k-1 pairwise comparisons that update TrueSkill ratings (mu/sigma per crash). An **UncertaintySelector** chooses which groups to evaluate next by sampling from crashes with high sigma values, ensuring informative comparisons. 
+We use **TrueSkill** for ranking, but with an important adaptation: while TrueSkill is designed for pairwise comparisons, we perform **k-way ordinal comparisons** (typically 4 crashes at a time) and convert them to sequential pairwise TrueSkill updates. A configurable **Judge** (typically an LLM-based agent like `cursor-agent`) ranks small groups of crashes, and these ordinal results are decomposed into k-1 pairwise comparisons that update TrueSkill ratings (mu/sigma per crash). An **UncertaintySelector** uses **probabilistic sampling** to choose which groups to evaluate next, converting uncertainty (sigma) values into a probability distribution with configurable temperature, ensuring informative comparisons while maintaining exploration diversity. 
 
 **k-way judging:** Instead of evaluating crashes strictly pairwise, we present a group of k crashes to the judge and rank them all at once. To update TrueSkill, we naively convert the k-way ranking into k-1 sequential pairwise updates. This sacrifices some theoretical rigor, because converting a k-way ranking into sequential pairwise updates treats correlated outcomes as independent, which can introduce noise and reduce the probabilistic fidelity of the TrueSkill updates.
 
@@ -64,6 +64,19 @@ uv run python -m crash_tournament \
     --crashes-pattern "crash.json" \
     --output-dir ./output \
     --judge-type simulated
+
+# Use different temperature values for sampling behavior
+uv run python -m crash_tournament \
+    --crashes-dir ./crashes \
+    --output-dir ./output \
+    --judge-type cursor-agent \
+    --temperature 0.5  # More greedy (focuses on highest uncertainty)
+
+uv run python -m crash_tournament \
+    --crashes-dir ./crashes \
+    --output-dir ./output \
+    --judge-type cursor-agent \
+    --temperature 2.0  # More diverse (explores more crashes)
 ```
 
 ### Options
@@ -79,6 +92,7 @@ uv run python -m crash_tournament \
 - `--workers`: Number of worker threads (default: 1)
 - `--resume`: Load snapshot and continue from previous run
 - `--uncertainty-threshold`: Stop tournament when average uncertainty drops below this threshold (default: run until budget exhausted)
+- `--temperature`: Temperature for probabilistic uncertainty sampling (default: 1.0, lower=more greedy, higher=more diverse)
 - `--debug`: Enable debug logging
 
 ## Architecture
@@ -125,7 +139,7 @@ The system uses dependency injection to wire together swappable components:
 
 **`Selector`** — Decides which crash groups to evaluate next
 - `next_groups(all_crash_ids: Sequence[str], k: int, budget: int) -> Sequence[Sequence[str]]`: Generate groups
-- Implementation: `UncertaintySelector` (samples high-sigma crashes, fills groups with nearby-mu crashes)
+- Implementation: `UncertaintySelector` (probabilistically samples high-sigma crashes, fills groups with nearby-mu crashes)
 
 **`Orchestrator`** — Main control loop
 - Wires all components via dependency injection
@@ -146,7 +160,7 @@ CrashFetcher → Orchestrator → Selector → Judge → Storage
 ```
 
 1. **Orchestrator** gets crash IDs from **CrashFetcher**
-2. **Selector** uses **Ranker** uncertainty (sigma) to choose groups
+2. **Selector** uses **Ranker** uncertainty (sigma) to probabilistically sample groups
 3. **Orchestrator** calls **Judge** (in thread pool) to rank each group
 4. **Judge** results persisted via **Storage** and fed to **Ranker**
 5. **Ranker** updates TrueSkill ratings (mu/sigma)
@@ -185,27 +199,50 @@ After seeding, UncertaintySelector focuses evaluations on high-uncertainty crash
 - `--k`: Crashes per group (default: 4, minimum 2)
 - `--workers`: Number of worker threads (default: 1)
 - `--judge-type`: Judge implementation (default: simulated)
+- `--temperature`: Temperature for probabilistic uncertainty sampling (default: 1.0)
 - `--resume`: Load snapshot and continue from previous run
 
 **Note:** If fewer crashes are available than `k`, the system uses all available crashes (effectively reducing group size). For meaningful tournaments, ensure you have significantly more crashes than `k`.
 
 ## UncertaintySelector Algorithm
 
-Adaptive sampling algorithm that minimizes evaluations while maximizing information gain.
+Adaptive sampling algorithm that minimizes evaluations while maximizing information gain through **probabilistic uncertainty sampling**.
 
 **Parameters:**
-- `K_uncertain`: Top N uncertain crashes to consider (default: 5*k)
+- `K_uncertain`: Number of uncertain crashes to sample (default: 5*k)
 - `delta_mu`: Max μ difference for "nearby" crashes (default: 1.0)
 - `max_evals_per_crash`: Optional evaluation limit per crash
+- `temperature`: Controls exploration vs exploitation (default: 1.0)
+
+**Probabilistic Sampling:**
+Instead of greedily selecting the top-K highest uncertainty crashes, the selector uses **temperature-controlled probabilistic sampling** to convert uncertainty (σ) values into a probability distribution:
+
+```
+p_i = (σ_i)^(1/T) / Σ_j (σ_j)^(1/T)
+```
+
+Where T is the temperature parameter:
+- **T < 1.0**: More greedy, heavily favors high-σ crashes (similar to original behavior)
+- **T = 1.0**: Proportional to σ values (balanced exploration/exploitation)
+- **T > 1.0**: More diverse, flattens distribution to increase exploration
+- **T = 0**: Pure greedy selection (highest σ always selected)
 
 **Per-round algorithm:**
-1. Query ranker for all σ values, sort descending, take top K_uncertain
-2. For each group: select highest-σ crash not over-evaluated, find crashes with |μ - target_μ| ≤ delta_mu, fill group with k-1 nearby crashes
-3. If insufficient nearby crashes, fill with random available crashes
-4. Track groups as normalized tuples to avoid duplicates (retry up to 3 times)
-5. Update eval_counts to respect max_evals_per_crash
+1. Query ranker for all σ values from all crashes
+2. **Sample K_uncertain crashes probabilistically** using temperature-scaled softmax
+3. For each group: select one sampled crash as target, find crashes with |μ - target_μ| ≤ delta_mu, fill group with k-1 nearby crashes
+4. If insufficient nearby crashes, fill with random available crashes
+5. Track groups as normalized tuples to avoid duplicates (retry up to 3 times)
+6. Update eval_counts to respect max_evals_per_crash
 
-**Rationale:** Comparing similar-scored (nearby μ) but uncertain (high σ) crashes efficiently resolves ranking ambiguity.
+**Benefits of Probabilistic Sampling:**
+- **Prevents over-focusing**: Avoids repeatedly selecting the same high-σ crashes
+- **Robust to outliers**: Reduces impact of artificially inflated σ values
+- **Maintains uncertainty focus**: Still prioritizes high-uncertainty crashes while allowing diversity
+- **Configurable exploration**: Temperature parameter allows tuning the exploration/exploitation balance
+- **Reduces stagnation**: Prevents local "hot spots" of evaluation
+
+**Rationale:** Probabilistic sampling of uncertain crashes combined with nearby-μ grouping efficiently resolves ranking ambiguity while maintaining exploration diversity.
 
 ### Key Design Decisions
 
