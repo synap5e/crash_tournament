@@ -222,7 +222,7 @@ p_i = (σ_i)^(1/T) / Σ_j (σ_j)^(1/T)
 ```
 
 Where T is the temperature parameter:
-- **T < 1.0**: More greedy, heavily favors high-σ crashes (similar to original behavior)
+- **T < 1.0**: More greedy, heavily favors high-σ crashes
 - **T = 1.0**: Proportional to σ values (balanced exploration/exploitation)
 - **T > 1.0**: More diverse, flattens distribution to increase exploration
 - **T = 0**: Pure greedy selection (highest σ always selected)
