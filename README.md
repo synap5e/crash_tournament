@@ -215,13 +215,13 @@ Adaptive sampling algorithm that minimizes evaluations while maximizing informat
 - `temperature`: Controls exploration vs exploitation (default: 1.0)
 
 **Probabilistic Sampling:**
-Instead of greedily selecting the top-K highest uncertainty crashes, the selector uses **temperature-controlled probabilistic sampling** to convert uncertainty (σ) values into a probability distribution:
+Instead of greedily selecting the top-K highest uncertainty crashes, the selector uses **temperature-controlled power-based normalization** to convert uncertainty (σ) values into a probability distribution:
 
 ```
-p_i = (σ_i)^(1/T) / Σ_j (σ_j)^(1/T)
+p_i = (σ_i + ε)^(1/T) / Σ_j (σ_j + ε)^(1/T)
 ```
 
-Where T is the temperature parameter:
+Where T is the temperature parameter and ε is a small constant (1e-10) for numerical stability:
 - **T < 1.0**: More greedy, heavily favors high-σ crashes
 - **T = 1.0**: Proportional to σ values (balanced exploration/exploitation)
 - **T > 1.0**: More diverse, flattens distribution to increase exploration

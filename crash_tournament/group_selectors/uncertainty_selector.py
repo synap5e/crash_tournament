@@ -8,6 +8,9 @@ import random
 import numpy as np
 from typing import Dict, List, Optional, Sequence
 
+# Numerical stability constant for power calculations
+EPSILON = 1e-10
+
 from ..interfaces import Ranker, Selector
 
 
@@ -79,19 +82,20 @@ class UncertaintySelector(Selector):
         # Extract sigma values
         sigmas = np.array([score for _, score in uncertainty_scores])
         
-        # Apply temperature scaling: σ^(1/T)
+        # Apply temperature scaling: (σ + ε)^(1/T) for numerical stability
         if self.temperature > 0:
-            scaled_sigmas = np.power(sigmas, 1.0 / self.temperature)
+            scaled_sigmas = np.power(sigmas + EPSILON, 1.0 / self.temperature)
         else:
-            # Handle T=0 case (pure greedy) with deterministic tie-breaking
+            # Handle T=0 case (pure greedy) with stable tie-breaking
             scaled_sigmas = np.zeros_like(sigmas)
             max_val = np.max(sigmas)
             max_indices = np.where(sigmas == max_val)[0]
-            # Use deterministic tie-breaking: always pick the first occurrence
-            chosen_idx = max_indices[0]
+            # Stable tie-breaking: pick crash with lexicographically smallest ID
+            crash_ids = [crash_id for crash_id, _ in uncertainty_scores]
+            chosen_idx = min(max_indices, key=lambda idx: crash_ids[idx])
             scaled_sigmas[chosen_idx] = 1.0
         
-        # Convert to probabilities (softmax)
+        # Convert to probabilities (power-based normalization)
         if np.sum(scaled_sigmas) > 0:
             probabilities = scaled_sigmas / np.sum(scaled_sigmas)
         else:
