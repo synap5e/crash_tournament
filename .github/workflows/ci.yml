@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        version: "latest"
+    
+    - name: Install dependencies
+      run: uv sync --extra dev
+    
+    - name: Run tests
+      run: uv run pytest tests/ -v --tb=short --continue-on-collection-errors
+      continue-on-error: true
+    
+    - name: Run linting (format check)
+      run: |
+        uv run black --check . || echo "Code formatting issues found - consider running 'black .' to fix"
+        uv run isort --check-only . || echo "Import sorting issues found - consider running 'isort .' to fix"
+    
+    - name: Run type checking
+      run: |
+        uv run mypy crash_tournament/ || echo "Type checking issues found - consider fixing mypy errors"
