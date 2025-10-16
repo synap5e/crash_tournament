@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "crash-tournament"
+version = "0.1.0"
+description = "Adaptive Comparative Judging System for crash report ranking"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pytest>=8.4.2",
+    "trueskill>=0.4.5",
+    "loguru>=0.7.0",
+    "prettytable>=3.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "black>=22.0",
+    "isort>=5.0",
+    "mypy>=1.0",
+]
+
+[project.scripts]
+crash-tournament = "crash_tournament.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["crash_tournament*"]
+
+[tool.black]
+line-length = 88
+target-version = ['py310']
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
