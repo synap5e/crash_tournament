@@ -83,10 +83,13 @@ class UncertaintySelector(Selector):
         if self.temperature > 0:
             scaled_sigmas = np.power(sigmas, 1.0 / self.temperature)
         else:
-            # Handle T=0 case (pure greedy)
+            # Handle T=0 case (pure greedy) with deterministic tie-breaking
             scaled_sigmas = np.zeros_like(sigmas)
-            max_idx = np.argmax(sigmas)
-            scaled_sigmas[max_idx] = 1.0
+            max_val = np.max(sigmas)
+            max_indices = np.where(sigmas == max_val)[0]
+            # Use deterministic tie-breaking: always pick the first occurrence
+            chosen_idx = max_indices[0]
+            scaled_sigmas[chosen_idx] = 1.0
         
         # Convert to probabilities (softmax)
         if np.sum(scaled_sigmas) > 0:
@@ -161,10 +164,7 @@ class UncertaintySelector(Selector):
             return None
         
         # Select from available candidates (prioritizing uncertain ones if available)
-        if available_candidates:
-            target_crash = available_candidates[0]
-        else:
-            return None
+        target_crash = available_candidates[0]
         
         # Get nearby crashes (excluding over-evaluated ones)
         nearby_crashes = self._get_nearby_crashes(target_crash, all_crash_ids, k)
