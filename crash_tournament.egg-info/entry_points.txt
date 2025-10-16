@@ -1,2 +1,0 @@
-[console_scripts]
-crash-tournament = crash_tournament.__main__:main
