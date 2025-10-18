@@ -72,7 +72,3 @@ class DummyJudge(Judge):
             parsed_result={"rationale": rationale},
             judge_id=self.judge_id,
         )
-
-    def test_connection(self) -> bool:
-        """Test connection (always succeeds for dummy judge)."""
-        return True

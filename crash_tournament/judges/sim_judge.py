@@ -45,7 +45,7 @@ class SimulatedJudge(Judge):
 
     def _get_noisy_scores(self, crashes: Sequence[Crash]) -> list[tuple[Crash, float]]:
         """Get noisy scores for crashes."""
-        noisy_scores = []
+        noisy_scores = list[tuple[Crash, float]]()
 
         for crash in crashes:
             # Get ground truth score
@@ -92,7 +92,7 @@ class SimulatedJudge(Judge):
         for i, (crash, score) in enumerate(noisy_scores):
             true_score = self.ground_truth.get(crash.crash_id, 0.0)
             raw_output += (
-                f"{i+1}. {crash.crash_id}: {score:.3f} (true: {true_score:.3f})\n"
+                f"{i + 1}. {crash.crash_id}: {score:.3f} (true: {true_score:.3f})\n"
             )
 
         return OrdinalResult(

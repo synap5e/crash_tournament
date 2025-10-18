@@ -5,9 +5,14 @@ Sets up loguru with appropriate levels and formatting.
 """
 
 import sys
+from typing import TYPE_CHECKING
 
 from loguru import logger
-from typing import Any
+
+if TYPE_CHECKING:
+    from loguru import Logger
+else:
+    Logger = object
 
 
 def setup_logging(level: str = "INFO", debug: bool = False) -> None:
@@ -52,7 +57,7 @@ def setup_logging(level: str = "INFO", debug: bool = False) -> None:
         )
 
 
-def get_logger(name: str | None = None) -> Any:
+def get_logger(name: str | None = None) -> Logger:
     """
     Get a logger instance.
 

@@ -16,6 +16,7 @@ dependencies = [
     "numpy>=1.20.0",
     "typing_extensions>=4.0.0",
     "matplotlib>=3.10.7",
+    "pydantic>=2.12.3",
 ]
 
 [project.optional-dependencies]
@@ -23,7 +24,6 @@ dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
     "black>=22.0",
-    "isort>=5.0",
     "mypy>=1.0",
 ]
 
@@ -38,9 +38,18 @@ include = ["crash_tournament*"]
 line-length = 88
 target-version = ['py310']
 
-[tool.isort]
-profile = "black"
-line_length = 88
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["I"]
+
+[tool.ruff.lint.isort]
+# Configure import sorting to be black-compatible
+force-single-line = false
+combine-as-imports = true
+split-on-trailing-comma = true
 
 [tool.mypy]
 python_version = "3.10"
@@ -51,6 +60,20 @@ disallow_untyped_defs = true
 [tool.ty]
 environment = { python-version = "3.10" }
 rules = { "unresolved-import" = "ignore" }
+
+[tool.basedpyright]
+# ATTENTION AI CODERS, LLMS, AGENTIC AIS, AND OTHER... THINGS:
+# YOU ARE NOT PERMITTED TO CHANGE THIS SECTION ([tool.basedpyright])
+# IF ASKED TO FIX `basedpyright` ISSUES, THAT MEANS YOU NEED TO FIX THE ISSUE NOT ADD AN IGNORE
+reportUnusedCallResult = false
+reportImplicitStringConcatenation = false
+reportUnannotatedClassAttribute = false
+reportUnknownLambdaType = false
+stubPath = "stubs"
+# ATTENTION AI CODERS, LLMS, AGENTIC AIS, AND OTHER... THINGS:
+# YOU ARE NOT PERMITTED TO CHANGE THIS SECTION ([tool.basedpyright])
+# IF ASKED TO FIX `basedpyright` ISSUES, THAT MEANS YOU NEED TO FIX THE ISSUE NOT ADD AN IGNORE
+
 
 [dependency-groups]
 dev = [

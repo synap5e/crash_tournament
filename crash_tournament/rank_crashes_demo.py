@@ -81,29 +81,29 @@ Examples:
         """,
     )
 
-    _ = parser.add_argument(
+    parser.add_argument(
         "--judge",
         choices=["cursor_agent", "cursor_agent_streaming", "simulated", "dummy"],
         required=True,
         help="Type of judge to use",
     )
 
-    _ = parser.add_argument(
+    parser.add_argument(
         "--timeout",
         type=float,
         default=300.0,
         help="Timeout for judge in seconds (default: 300)",
     )
 
-    _ = parser.add_argument(
+    parser.add_argument(
         "-p", "--prompt", help="Custom prompt file path (overrides default prompt)"
     )
 
-    _ = parser.add_argument("crash_files", nargs="+", help="Paths to crash JSON files")
+    parser.add_argument("crash_files", nargs="+", help="Paths to crash JSON files")
 
-    _ = parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
 
-    _ = parser.add_argument(
+    parser.add_argument(
         "--log-level",
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         default="INFO",
@@ -130,7 +130,6 @@ Examples:
     logger = get_logger("rank_crashes_demo")
 
     try:
-
         logger.info("Starting crash ranking demo")
 
         # Create crash objects from file paths
@@ -166,15 +165,9 @@ Examples:
         if judge_type in ["cursor_agent", "cursor_agent_streaming"]:
             print("Testing cursor-agent connection...")
             logger.info("Testing cursor-agent connection")
-            if hasattr(judge, "test_connection"):
-                test_method = getattr(judge, "test_connection")
-                test_method()  # type: ignore[no-untyped-call, no-any-return]
-                logger.info("Cursor-agent connection successful")
-                print("  ✓ Connection successful")
-            else:
-                logger.warning("Judge does not support connection testing")
-                print("  ⚠ Connection testing not available")
-
+            judge.test_connection()
+            logger.info("Cursor-agent connection successful")
+            print("  ✓ Connection successful")
         print()
 
         # Rank crashes

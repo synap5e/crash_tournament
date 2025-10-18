@@ -4,19 +4,15 @@ TrueSkill ranker implementation.
 Uses trueskill package with k-way to pairwise conversion and proper weighting.
 """
 
-import threading
-from typing import TYPE_CHECKING, cast
-
+from trueskill import Rating, rate_1vs1, setup
 from typing_extensions import override
-
-if TYPE_CHECKING:
-    from loguru._logger import Logger
-
-from trueskill import Rating, rate_1vs1, setup  # type: ignore[import-untyped]
 
 from ..interfaces import Ranker, RankerState
 from ..logging_config import get_logger
 from ..models import OrdinalResult
+
+# Module-level logger
+logger = get_logger("trueskill_ranker")
 
 
 class TrueSkillRanker(Ranker):
@@ -59,17 +55,9 @@ class TrueSkillRanker(Ranker):
         self.rankings = dict[str, list[int]]()  # All rankings for each crash
         self.group_sizes = dict[str, list[int]]()  # Group sizes for each evaluation
 
-        # Thread safety lock
-        self._lock: threading.Lock = threading.Lock()
-
-        # Setup logger
-        self.logger: Logger = get_logger("trueskill_ranker")
-
         # Configure trueskill
-        _ = setup(mu=mu, sigma=sigma, tau=tau)
-        self.logger.info(
-            f"TrueSkill ranker initialized: mu={mu}, sigma={sigma}, tau={tau}"
-        )
+        setup(mu=mu, sigma=sigma, tau=tau)
+        logger.info(f"TrueSkill ranker initialized: mu={mu}, sigma={sigma}, tau={tau}")
 
     def _get_or_create_rating(self, crash_id: str) -> Rating:
         """Get existing rating or create new one with default values.
@@ -92,68 +80,69 @@ class TrueSkillRanker(Ranker):
 
         Converts [a,b,c,d] to sequential wins: a>b, b>c, c>d
         Applies weight scaling to avoid overconfidence from k-way expansion.
-        Thread-safe implementation.
         """
         ordered_ids = res.ordered_ids
 
         if len(ordered_ids) < 2:
-            self.logger.debug("Skipping update: need at least 2 items for comparison")
+            logger.debug("Skipping update: need at least 2 items for comparison")
             return  # Need at least 2 items for comparison
 
-        self.logger.debug(f"Updating rankings for {ordered_ids} with weight {weight}")
+        logger.debug(f"Updating rankings for {ordered_ids} with weight {weight}")
 
-        # Thread-safe update with lock
-        with self._lock:
-            # Track evaluation counts for all crashes in this group
-            for crash_id in ordered_ids:
-                self.eval_counts[crash_id] = self.eval_counts.get(crash_id, 0) + 1
+        # Track evaluation counts for all crashes in this group
+        for crash_id in ordered_ids:
+            self.eval_counts[crash_id] = self.eval_counts.get(crash_id, 0) + 1
 
-            # Track wins for each crash (number of other crashes it beat)
-            group_size = len(ordered_ids)
-            for rank, crash_id in enumerate(ordered_ids):
-                # A crash beats all crashes ranked below it
-                wins = group_size - rank - 1
-                self.win_counts[crash_id] = self.win_counts.get(crash_id, 0) + wins
-                if crash_id not in self.rankings:
-                    self.rankings[crash_id] = []
-                    self.group_sizes[crash_id] = []
-                self.rankings[crash_id].append(rank + 1)  # 1-based ranking
-                self.group_sizes[crash_id].append(group_size)
+        # Track wins for each crash (number of other crashes it beat)
+        group_size = len(ordered_ids)
+        for rank, crash_id in enumerate(ordered_ids):
+            # A crash beats all crashes ranked below it
+            wins = group_size - rank - 1
+            self.win_counts[crash_id] = self.win_counts.get(crash_id, 0) + wins
+            if crash_id not in self.rankings:
+                self.rankings[crash_id] = []
+                self.group_sizes[crash_id] = []
+            self.rankings[crash_id].append(rank + 1)  # 1-based ranking
+            self.group_sizes[crash_id].append(group_size)
 
-            # Convert k-way to k-1 sequential pairwise wins
-            for i in range(len(ordered_ids) - 1):
-                winner_id = ordered_ids[i]
-                loser_id = ordered_ids[i + 1]
+        # Convert k-way to k-1 sequential pairwise wins
+        for i in range(len(ordered_ids) - 1):
+            winner_id = ordered_ids[i]
+            loser_id = ordered_ids[i + 1]
 
-                # Get current ratings
-                winner_rating = self._get_or_create_rating(winner_id)
-                loser_rating = self._get_or_create_rating(loser_id)
+            # Get current ratings
+            winner_rating = self._get_or_create_rating(winner_id)
+            loser_rating = self._get_or_create_rating(loser_id)
 
-                # Apply weight by adjusting tau (dynamic factor)
-                # Lower weight = more conservative updates (dampen tau)
-                adjusted_tau = self.tau * weight if weight > 0 else self.tau
+            # Apply weight by adjusting tau (dynamic factor)
+            # Lower weight = more conservative updates (dampen tau)
+            adjusted_tau = self.tau * weight if weight > 0 else self.tau
 
-                # Update ratings with adjusted tau
-                # NOTE: This modifies global TrueSkill state, but it's NOT a thread safety issue
-                # because TrueSkillRanker is only accessed from the main thread. The orchestrator
-                # uses ThreadPoolExecutor for judge evaluations, but all ranker operations
-                # (update_with_ordinal, get_score, etc.) are explicitly called from the main
-                # thread in _process_completed_futures() to ensure thread safety.
-                original_tau = self.tau
-                _ = setup(mu=self.mu, sigma=self.sigma, tau=adjusted_tau)
+            # Update ratings with adjusted tau
+            # NOTE: This modifies global TrueSkill state, but it's NOT a thread safety issue
+            # because TrueSkillRanker is only accessed from the main thread. The orchestrator
+            # uses ThreadPoolExecutor for judge evaluations, but all ranker operations
+            # (update_with_ordinal, get_score, etc.) are explicitly called from the main
+            # thread in _process_completed_futures() to ensure thread safety.
+            original_tau = self.tau
+            setup(mu=self.mu, sigma=self.sigma, tau=adjusted_tau)
 
-                new_winner, new_loser = rate_1vs1(winner_rating, loser_rating, drawn=False)  # type: ignore[misc]
+            new_winner, new_loser = rate_1vs1(winner_rating, loser_rating, drawn=False)  # type: ignore[misc]
 
-                # Restore original tau
-                _ = setup(mu=self.mu, sigma=self.sigma, tau=original_tau)
+            # Restore original tau
+            setup(mu=self.mu, sigma=self.sigma, tau=original_tau)
 
-                # Update stored ratings
-                self.ratings[winner_id] = new_winner
-                self.ratings[loser_id] = new_loser
+            # Update stored ratings
+            self.ratings[winner_id] = new_winner
+            self.ratings[loser_id] = new_loser
 
-                self.logger.info(f"Score update: {winner_id} vs {loser_id}")
-                self.logger.info(f"  {winner_id}: {winner_rating.mu:.2f}->{new_winner.mu:.2f} (σ: {winner_rating.sigma:.2f}->{new_winner.sigma:.2f})")  # type: ignore[attr-defined]
-                self.logger.info(f"  {loser_id}: {loser_rating.mu:.2f}->{new_loser.mu:.2f} (σ: {loser_rating.sigma:.2f}->{new_loser.sigma:.2f})")  # type: ignore[attr-defined]
+            logger.info(f"Score update: {winner_id} vs {loser_id}")
+            logger.info(
+                f"  {winner_id}: {winner_rating.mu:.2f}->{new_winner.mu:.2f} (σ: {winner_rating.sigma:.2f}->{new_winner.sigma:.2f})"
+            )  # type: ignore[attr-defined]
+            logger.info(
+                f"  {loser_id}: {loser_rating.mu:.2f}->{new_loser.mu:.2f} (σ: {loser_rating.sigma:.2f}->{new_loser.sigma:.2f})"
+            )  # type: ignore[attr-defined]
 
     @override
     def get_score(self, crash_id: str) -> float:
@@ -195,26 +184,13 @@ class TrueSkillRanker(Ranker):
         self.rankings.clear()
         self.group_sizes.clear()
 
-        # Handle both old and new snapshot formats
-        if "ratings" in state:
-            # New format with statistics
-            ratings_data = state["ratings"]
-            statistics = state.get("statistics", {})
-            self.eval_counts = cast(
-                dict[str, int], dict(statistics.get("eval_counts", {}))
-            )
-            self.win_counts = cast(
-                dict[str, int], dict(statistics.get("win_counts", {}))
-            )
-            self.rankings = cast(
-                dict[str, list[int]], dict(statistics.get("rankings", {}))
-            )
-            self.group_sizes = cast(
-                dict[str, list[int]], dict(statistics.get("group_sizes", {}))
-            )
-        else:
-            # Old format - just ratings
-            ratings_data = state
+        # Load ratings and statistics from snapshot
+        ratings_data = state["ratings"]
+        statistics = state.get("statistics", {})
+        self.eval_counts = dict(statistics.get("eval_counts", {}))
+        self.win_counts = dict(statistics.get("win_counts", {}))
+        self.rankings = dict(statistics.get("rankings", {}))
+        self.group_sizes = dict(statistics.get("group_sizes", {}))
 
         for crash_id, rating_data in ratings_data.items():
             rating_dict = rating_data  # type: ignore[assignment]
@@ -264,7 +240,7 @@ class TrueSkillRanker(Ranker):
 
     def get_all_statistics(self) -> dict[str, dict[str, float]]:
         """Get all statistics for all crashes."""
-        stats = {}
+        stats: dict[str, dict[str, float]] = {}
         for crash_id in self.ratings.keys():
             stats[crash_id] = {
                 "score": self.get_score(crash_id),

@@ -13,6 +13,9 @@ from ..interfaces import CrashFetcher
 from ..logging_config import get_logger
 from ..models import Crash
 
+# Module-level logger
+logger = get_logger("directory_fetcher")
+
 
 class DirectoryCrashFetcher(CrashFetcher):
     """
@@ -31,9 +34,6 @@ class DirectoryCrashFetcher(CrashFetcher):
         """
         self.crashes_dir: Path = Path(crashes_dir)
         self.pattern: str = pattern
-
-        # Setup logger
-        self.logger = get_logger("directory_fetcher")
 
         # Validate directory exists and is a directory
         if not self.crashes_dir.exists():
@@ -57,7 +57,7 @@ class DirectoryCrashFetcher(CrashFetcher):
         crash_files = list(self.crashes_dir.rglob(self.pattern))
 
         if not crash_files:
-            self.logger.warning(
+            logger.warning(
                 f"No files matching pattern '{self.pattern}' found in {self.crashes_dir}"
             )
             return
@@ -68,9 +68,7 @@ class DirectoryCrashFetcher(CrashFetcher):
             try:
                 crash_file.resolve().relative_to(self.crashes_dir.resolve())
             except ValueError:
-                self.logger.warning(
-                    f"Skipping file outside crashes directory: {crash_file}"
-                )
+                logger.warning(f"Skipping file outside crashes directory: {crash_file}")
                 continue
             # Skip directories
             if crash_file.is_dir():
@@ -86,7 +84,7 @@ class DirectoryCrashFetcher(CrashFetcher):
             self._cache[crash.crash_id] = crash
 
         self._cache_loaded = True
-        self.logger.info(f"Loaded {len(self._cache)} crashes from {self.crashes_dir}")
+        logger.info(f"Loaded {len(self._cache)} crashes from {self.crashes_dir}")
 
     @override
     def list_crashes(self) -> Iterable[Crash]:

@@ -10,6 +10,10 @@ from collections.abc import Sequence
 from typing_extensions import override
 
 from ..interfaces import Ranker, Selector
+from ..logging_config import get_logger
+
+# Module-level logger
+logger = get_logger("random_selector")
 
 
 class RandomSelector(Selector):
@@ -24,9 +28,6 @@ class RandomSelector(Selector):
                    need access to ranking data for intelligent selection)
         """
         self.ranker = ranker
-        from ..logging_config import get_logger
-
-        self.logger = get_logger("random_selector")
 
     @override
     def select_matchup(
@@ -34,10 +35,10 @@ class RandomSelector(Selector):
     ) -> Sequence[str] | None:
         """Return random matchup of crashes."""
         if len(all_crash_ids) < 2:
-            self.logger.warning("Insufficient crashes for matchup")
+            logger.warning("Insufficient crashes for matchup")
             return None
 
         size = min(matchup_size, len(all_crash_ids))
         matchup = random.sample(list(all_crash_ids), size)
-        self.logger.debug(f"Selected random matchup of size {size}: {matchup}")
+        logger.debug(f"Selected random matchup of size {size}: {matchup}")
         return matchup

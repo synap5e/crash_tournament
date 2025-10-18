@@ -66,6 +66,10 @@ class Judge(ABC):
         """
         pass
 
+    def test_connection(self) -> bool:
+        """Test the connection to the judge."""
+        return True
+
 
 class Storage(ABC):
     """Interface for persisting results and state."""
@@ -73,6 +77,11 @@ class Storage(ABC):
     @abstractmethod
     def persist_matchup_result(self, res: OrdinalResult) -> None:
         """Persist a matchup evaluation result."""
+        pass
+
+    @abstractmethod
+    def persist_judge_output(self, res: OrdinalResult) -> None:
+        """Persist judge output data to dedicated file."""
         pass
 
     @abstractmethod

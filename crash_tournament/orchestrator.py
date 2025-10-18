@@ -5,16 +5,18 @@ Coordinates fetcher, judge, storage, ranker, and selector components.
 Uses just-in-time work queue pattern for maximum adaptiveness.
 """
 
+import typing
 from collections.abc import Sequence
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass
-
-from loguru._logger import Logger
 
 from .exceptions import ConfigurationError
 from .interfaces import CrashFetcher, Judge, Ranker, Selector, Storage, SystemState
 from .logging_config import get_logger
 from .models import Crash, OrdinalResult
+
+# Module-level logger
+logger = get_logger("orchestrator")
 
 # Constants for failure threshold logic
 EARLY_ABORT_THRESHOLD = 4  # Abort if 100% of first 4 evaluations fail
@@ -86,19 +88,16 @@ class Orchestrator:
         # Milestone tracking
         self.last_milestone: int = 0  # Last milestone (multiple of 50) where we printed
 
-        # Setup logger
-        self.logger: Logger = get_logger("orchestrator")
-
     def run(self) -> dict[str, float]:
         """Run tournament using just-in-time work queue pattern."""
-        self.logger.info(f"Starting crash tournament with config: {self.config}")
+        logger.info(f"Starting crash tournament with config: {self.config}")
         print(f"Starting crash tournament with config: {self.config}")
 
         # Load snapshot if exists
         snapshot = self.storage.load_snapshot()
         if snapshot:
             self._load_snapshot(snapshot)
-            self.logger.info(
+            logger.info(
                 f"Resumed from snapshot: {self.evaluated_matchups} matchups evaluated"
             )
             print(
@@ -108,14 +107,9 @@ class Orchestrator:
         # Get all crash IDs ONCE (main thread)
         crashes = list(self.fetcher.list_crashes())
         crash_ids = [c.crash_id for c in crashes]
-        self.logger.info(f"Loaded {len(crash_ids)} crashes for evaluation")
+        logger.info(f"Loaded {len(crash_ids)} crashes for evaluation")
 
         # Pure worker function (module-level, no state access)
-        def evaluate_matchup_worker(
-            crashes: Sequence[Crash], judge: Judge
-        ) -> OrdinalResult:
-            """Pure worker function - receives data, returns result."""
-            return judge.evaluate_matchup(crashes)
 
         with ThreadPoolExecutor(max_workers=self.config.max_workers) as executor:
             futures = dict[
@@ -142,7 +136,7 @@ class Orchestrator:
 
                     # Check if we have enough available crashes
                     if len(available_crashes) < self.config.matchup_size:
-                        self.logger.info(
+                        logger.info(
                             f"Insufficient available crashes ({len(available_crashes)} available, {len(self.in_flight_crashes)} in-flight, {self.config.matchup_size} needed)"
                         )
                         # Don't submit more work, but continue to process in-flight futures
@@ -154,7 +148,7 @@ class Orchestrator:
                         available_crashes, self.config.matchup_size
                     )
                     if matchup_ids is None:
-                        self.logger.info("Selector returned no more matchups")
+                        logger.info("Selector returned no more matchups")
                         break
 
                     # Main thread fetches crash data
@@ -163,14 +157,19 @@ class Orchestrator:
                     ]
 
                     # Submit pure work to worker (crashes + judge, no state access)
-                    future = executor.submit(
-                        evaluate_matchup_worker, crashes, self.judge
+                    future = typing.cast(
+                        Future[OrdinalResult],
+                        executor.submit(
+                            lambda crashes, judge: judge.evaluate_matchup(crashes),  # pyright: ignore[reportUnknownArgumentType, reportUnknownMemberType]
+                            crashes,
+                            self.judge,
+                        ),
                     )
                     futures[future] = (matchup_ids, crashes)
 
                     # Mark these crashes as in-flight
                     self.in_flight_crashes.update(matchup_ids)
-                    self.logger.debug(
+                    logger.debug(
                         f"Marked in-flight: {matchup_ids}, total in-flight: {len(self.in_flight_crashes)}"
                     )
 
@@ -182,21 +181,19 @@ class Orchestrator:
 
                 # Wait for at least one to complete before checking for more work
                 if futures:
-                    _ = wait(futures.keys(), return_when=FIRST_COMPLETED)
+                    wait(futures.keys(), return_when=FIRST_COMPLETED)
                 else:
-                    self.logger.info(
-                        "No work in flight and cannot generate more matchups"
-                    )
+                    logger.info("No work in flight and cannot generate more matchups")
                     break  # No work in flight and can't generate more
 
             # Drain remaining futures
-            self.logger.info(f"Draining {len(futures)} remaining futures")
+            logger.info(f"Draining {len(futures)} remaining futures")
             self._process_completed_futures(futures, wait_all=True)
 
         # Save final snapshot
         self._save_snapshot()
 
-        self.logger.info(
+        logger.info(
             f"Tournament complete: {self.evaluated_matchups} matchups evaluated"
         )
         print(f"Tournament complete: {self.evaluated_matchups} matchups evaluated")
@@ -257,9 +254,9 @@ class Orchestrator:
 
                 # Release crashes from in-flight tracking
                 self.in_flight_crashes.difference_update(matchup_ids)
-                self.logger.debug(f"Released from in-flight: {matchup_ids}")
+                logger.debug(f"Released from in-flight: {matchup_ids}")
 
-                self.logger.info(
+                logger.info(
                     f"Completed matchup {self.evaluated_matchups}/{self.config.budget}: {matchup_ids}"
                 )
 
@@ -279,16 +276,14 @@ class Orchestrator:
                     self.last_milestone = self.evaluated_matchups
 
             except Exception as e:
-                self.logger.error(f"Evaluation failed for matchup {matchup_ids}: {e}")
+                logger.error(f"Evaluation failed for matchup {matchup_ids}: {e}")
                 self.failed_evaluations += 1
                 self.total_evaluations += 1
                 self.failure_log.append((matchup_ids, type(e).__name__, str(e)))
 
                 # Release crashes from in-flight tracking even on failure
                 self.in_flight_crashes.difference_update(matchup_ids)
-                self.logger.debug(
-                    f"Released from in-flight (after error): {matchup_ids}"
-                )
+                logger.debug(f"Released from in-flight (after error): {matchup_ids}")
 
                 # Abort if failure rate too high
                 if (
@@ -318,12 +313,12 @@ class Orchestrator:
             },
         }
         self.storage.save_snapshot(snapshot)
-        self.logger.debug(f"Saved snapshot at {self.evaluated_matchups} matchups")
+        logger.debug(f"Saved snapshot at {self.evaluated_matchups} matchups")
 
     def _print_progress(self) -> None:
         """Print progress (main thread only)."""
         progress = (self.evaluated_matchups / self.config.budget) * 100
-        self.logger.info(
+        logger.info(
             f"Progress: {self.evaluated_matchups}/{self.config.budget} ({progress:.1f}%), {len(self.in_flight_crashes)} crashes in-flight"
         )
         print(
@@ -332,10 +327,10 @@ class Orchestrator:
 
     def _print_milestone(self) -> None:
         """Print milestone summary (main thread only)."""
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Milestone: {self.evaluated_matchups} matchups evaluated")
         print(
-            f"Success rate: {(1 - self.failed_evaluations/max(1, self.total_evaluations))*100:.1f}%"
+            f"Success rate: {(1 - self.failed_evaluations / max(1, self.total_evaluations)) * 100:.1f}%"
         )
 
         # Print top 5 crashes
@@ -343,7 +338,7 @@ class Orchestrator:
         print("\nTop 5 Crashes:")
         for i, (crash_id, score, uncertainty) in enumerate(top_crashes, 1):
             print(f"  {i}. {crash_id}: μ={score:.3f}, σ={uncertainty:.3f}")
-        print(f"{'='*60}\n")
+        print(f"{'=' * 60}\n")
 
     def _get_top_scores(self, n: int = 5) -> list[tuple[str, float, float]]:
         """Get top N crash scores for logging."""

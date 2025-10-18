@@ -6,7 +6,6 @@ Defines Crash and OrdinalResult models with validation.
 
 import time
 from dataclasses import dataclass, field
-from typing import Any
 
 from .exceptions import ValidationError
 
@@ -33,7 +32,7 @@ class OrdinalResult:
 
     ordered_ids: list[str]
     raw_output: str
-    parsed_result: dict[str, Any]
+    parsed_result: dict[str, object]
     timestamp: float = field(default_factory=time.time)
     judge_id: str = "unknown"
 

@@ -8,15 +8,18 @@ import json
 import subprocess
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, TypedDict, cast
+from typing import TypedDict, cast
 
-from loguru._logger import Logger
+from pydantic import TypeAdapter
 from typing_extensions import NotRequired, override
 
 from ..exceptions import JudgeError, ValidationError
 from ..interfaces import Judge
 from ..logging_config import get_logger
 from ..models import Crash, OrdinalResult
+
+# Module-level logger
+logger = get_logger("cursor_agent_judge")
 
 
 class CursorAgentJudgeError(JudgeError):
@@ -41,7 +44,58 @@ class CursorAgentResponse(TypedDict):
     """Type definition for cursor-agent JSON response."""
 
     result: str
-    activities: NotRequired[list[dict[str, Any]]]  # type: ignore[reportExplicitAny]
+    activities: NotRequired[
+        list[
+            dict[
+                str,
+                str
+                | int
+                | bool
+                | None
+                | list[str]
+                | dict[str, str | int | bool | None],
+            ]
+        ]
+    ]
+
+
+class TextContent(TypedDict):
+    type: str
+    text: str
+
+
+class MessageContent(TypedDict):
+    type: str
+    text: str
+
+
+class AssistantMessage(TypedDict):
+    content: list[MessageContent]
+
+
+class AssistantActivity(TypedDict):
+    type: str
+    message: AssistantMessage
+
+
+class ToolCallActivity(TypedDict):
+    type: str
+    subtype: str
+    tool_call: dict[str, dict[str, object]]
+
+
+class FilesResult(TypedDict):
+    files: list[str]
+    totalFiles: int
+
+
+class ContentResult(TypedDict):
+    content: str
+    totalLines: int
+
+
+class ToolError(TypedDict):
+    errorMessage: str
 
 
 class JudgeResult(TypedDict):
@@ -68,7 +122,6 @@ class CursorAgentJudge(Judge):
         """
         self.timeout: float = timeout
         self.judge_id: str = "cursor_agent"
-        self.logger: Logger = get_logger("cursor_agent_judge")
 
         # Use default prompt file if none specified
         if prompt_file is None:
@@ -105,7 +158,7 @@ class CursorAgentJudge(Judge):
         if "ordered" not in json_result:
             raise ValueError("cursor-agent response missing 'ordered' field")
 
-        ordered_ids = cast(list[str], json_result["ordered"])
+        ordered_ids = json_result["ordered"]
 
         if len(ordered_ids) != len(crashes):
             raise ValueError(
@@ -116,8 +169,8 @@ class CursorAgentJudge(Judge):
         crash_ids = {crash.crash_id for crash in crashes}
         for crash_id in ordered_ids:
             if crash_id not in crash_ids:
-                self.logger.error(f"Expected crash IDs: {list(crash_ids)}")
-                self.logger.error(f"Got crash IDs: {ordered_ids}")
+                logger.error(f"Expected crash IDs: {list(crash_ids)}")
+                logger.error(f"Got crash IDs: {ordered_ids}")
                 raise ValueError(
                     f"Unknown crash ID in result: {crash_id}. Expected: {list(crash_ids)}"
                 )
@@ -126,7 +179,7 @@ class CursorAgentJudge(Judge):
         return OrdinalResult(
             ordered_ids=ordered_ids,
             raw_output=output,
-            parsed_result=json_result,
+            parsed_result=dict(json_result),
             judge_id=self.judge_id,
         )
 
@@ -144,7 +197,7 @@ class CursorAgentJudge(Judge):
         prompt_template = self.prompt_file.read_text()
 
         # Format crash context
-        context_lines = []
+        context_lines = list[str]()
         for crash in crashes:
             context_lines.append(f"- id: {crash.crash_id} file: @{crash.file_path}")
         context = "\n".join(context_lines)
@@ -170,8 +223,8 @@ class CursorAgentJudge(Judge):
         cmd = ["cursor-agent", "--output-format=json", "-p", prompt]
 
         # Log the command being executed (full command for debugging)
-        self.logger.info(f"Running cursor-agent command: {' '.join(cmd)}")
-        self.logger.debug(f"Full prompt: {prompt}")
+        logger.info(f"Running cursor-agent command: {' '.join(cmd)}")
+        logger.debug(f"Full prompt: {prompt}")
 
         # Run cursor-agent
         try:
@@ -179,16 +232,16 @@ class CursorAgentJudge(Judge):
                 cmd, capture_output=True, text=True, timeout=self.timeout, check=True
             )
         except subprocess.CalledProcessError as e:
-            self.logger.error(f"cursor-agent failed with exit code {e.returncode}")
-            self.logger.error(f"stderr: {e.stderr}")
+            logger.error(f"cursor-agent failed with exit code {e.returncode}")
+            logger.error(f"stderr: {e.stderr}")  # pyright: ignore[reportAny]
             raise CursorAgentJudgeError(
-                f"cursor-agent execution failed: {e.stderr}"
+                f"cursor-agent execution failed: {e.stderr}"  # pyright: ignore[reportAny]
             ) from e
 
-        self.logger.info(
+        logger.info(
             f"cursor-agent completed successfully, output length: {len(result.stdout)} chars"
         )
-        self.logger.debug(f"Full agent output: {result.stdout}")
+        logger.debug(f"Full agent output: {result.stdout}")
 
         # Parse and log agent activities retroactively for better visibility
         self._log_agent_activities(result.stdout)
@@ -202,131 +255,131 @@ class CursorAgentJudge(Judge):
         Args:
             output: Raw output from cursor-agent
         """
-        try:
-            # Parse the JSON response to extract activities
-            response: dict[str, Any] = json.loads(output.strip())  # type: ignore[reportExplicitAny]
+        # Parse the JSON response to extract activities
+        response = TypeAdapter(CursorAgentResponse).validate_python(
+            json.loads(output.strip())
+        )
 
-            # Check if this is a streaming-style response with activities
-            if "activities" in response:
-                activities: list[dict[str, Any]] = cast(list[dict[str, Any]], response["activities"])  # type: ignore[reportExplicitAny]
-                for activity in activities:
-                    if activity.get("type") == "assistant":
-                        content: list[dict[str, Any]] = cast(list[dict[str, Any]], activity.get("message", {}).get("content", []))  # type: ignore[reportExplicitAny]
-                        for item in content:
-                            if item.get("type") == "text":
-                                text: str = cast(str, item.get("text", ""))
-                                if text:
-                                    self.logger.info(
-                                        f"Agent: {text[:100]}{'...' if len(text) > 100 else ''}"
-                                    )
+        # Check if this is a streaming-style response with activities
+        if "activities" in response:
+            activities = response["activities"]
+            for activity in activities:
+                activity_type = activity.get("type")
 
-                    elif activity.get("type") == "tool_call":
-                        if activity.get("subtype") == "started":
-                            tool_call_data: dict[str, Any] = cast(dict[str, Any], activity.get("tool_call", {}))  # type: ignore[reportExplicitAny]
-                            tool_name = next(
-                                (
-                                    k.replace("ToolCall", "")
-                                    for k in tool_call_data.keys()
-                                    if k.endswith("ToolCall")
-                                ),
-                                "unknown",
-                            )
+                if activity_type == "assistant":
+                    assistant_activity = TypeAdapter(AssistantActivity).validate_python(
+                        activity
+                    )
+                    for item in assistant_activity["message"]["content"]:
+                        if item["type"] == "text":
+                            text = item["text"]
+                            if text:
+                                logger.info(
+                                    f"Agent: {text[:100]}{'...' if len(text) > 100 else ''}"
+                                )
 
-                            tool_info: dict[str, Any] = cast(dict[str, Any], tool_call_data.get(f"{tool_name}ToolCall", {}))  # type: ignore[reportExplicitAny]
-                            args: dict[str, Any] = cast(dict[str, Any], tool_info.get("args", {}))  # type: ignore[reportExplicitAny]
+                elif activity_type == "tool_call":
+                    tool_activity = TypeAdapter(ToolCallActivity).validate_python(
+                        activity
+                    )
+                    tool_call_data = tool_activity["tool_call"]
 
+                    if tool_activity["subtype"] == "started":
+                        tool_name = next(
+                            (
+                                k.replace("ToolCall", "")
+                                for k in tool_call_data.keys()
+                                if k.endswith("ToolCall")
+                            ),
+                            "unknown",
+                        )
+
+                        tool_info = tool_call_data.get(f"{tool_name}ToolCall", {})
+                        args: object = tool_info.get("args", {})
+                        if isinstance(args, dict):
+                            # Type narrow args to dict[str, object] after isinstance check
+                            args_dict = cast(dict[str, object], args)
                             arg_summary = ", ".join(
-                                f"{k}={v}" for k, v in list(args.items())[:3]
+                                f"{k}={v}" for k, v in list(args_dict.items())[:3]
                             )
-                            if len(args) > 3:
+                            if len(args_dict) > 3:
                                 arg_summary += "..."
+                            logger.info(f"Tool: {tool_name}({arg_summary})")
 
-                            self.logger.info(f"Tool: {tool_name}({arg_summary})")
-                        elif activity.get("subtype") == "completed":
-                            tool_call_data = cast(dict[str, Any], activity.get("tool_call", {}))  # type: ignore[reportExplicitAny]
-                            tool_name = next(
-                                (
-                                    k.replace("ToolCall", "")
-                                    for k in tool_call_data.keys()
-                                    if k.endswith("ToolCall")
-                                ),
-                                "unknown",
-                            )
+                    elif tool_activity["subtype"] == "completed":
+                        tool_name = next(
+                            (
+                                k.replace("ToolCall", "")
+                                for k in tool_call_data.keys()
+                                if k.endswith("ToolCall")
+                            ),
+                            "unknown",
+                        )
 
-                            tool_info = cast(dict[str, Any], tool_call_data.get(f"{tool_name}ToolCall", {}))  # type: ignore[reportExplicitAny]
-                            result: dict[str, Any] = cast(dict[str, Any], tool_info.get("result", {}))  # type: ignore[reportExplicitAny]
-
+                        tool_info = tool_call_data.get(f"{tool_name}ToolCall", {})
+                        result: object = tool_info.get("result", {})
+                        if isinstance(result, dict):
                             if "success" in result:
-                                success_data: dict[str, Any] = cast(dict[str, Any], result["success"])  # type: ignore[reportExplicitAny]
-                                if "files" in success_data:
-                                    file_count: int = success_data.get("totalFiles", len(cast(list[Any], success_data.get("files", []))))  # type: ignore[reportExplicitAny]
-                                    self.logger.info(
-                                        f"Tool {tool_name} => found {file_count} files"
-                                    )
-                                elif "content" in success_data:
-                                    content_str: str = cast(
-                                        str, success_data.get("content", "")
-                                    )
-                                    lines: list[str] = content_str.split("\n")
-                                    total_lines: int = success_data.get(
-                                        "totalLines", len(lines)
-                                    )
-
-                                    if total_lines <= 10:
-                                        display_lines: list[str] = [
-                                            (
-                                                line[:200] + "..."
-                                                if len(line) > 200
-                                                else line
-                                            )
-                                            for line in lines
-                                        ]
-                                        content_preview = "\n".join(display_lines)
-                                        self.logger.info(
-                                            f"Tool {tool_name} => {total_lines} lines:\n{content_preview}"
+                                success_data: object = result["success"]  # pyright: ignore[reportUnknownVariableType]
+                                if isinstance(success_data, dict):
+                                    # Type narrow success_data to dict[str, object] after isinstance check
+                                    success_dict = cast(dict[str, object], success_data)
+                                    if "files" in success_dict:
+                                        files_result = TypeAdapter(
+                                            FilesResult
+                                        ).validate_python(success_dict)
+                                        logger.info(
+                                            f"Tool {tool_name} => found {files_result['totalFiles']} files"
+                                        )
+                                    elif "content" in success_dict:
+                                        content_result = TypeAdapter(
+                                            ContentResult
+                                        ).validate_python(success_dict)
+                                        lines = content_result["content"].split("\n")
+                                        self._log_content_preview(
+                                            tool_name,
+                                            lines,
+                                            content_result["totalLines"],
                                         )
                                     else:
-                                        first_5: list[str] = [
-                                            (
-                                                line[:200] + "..."
-                                                if len(line) > 200
-                                                else line
-                                            )
-                                            for line in lines[:5]
-                                        ]
-                                        last_5: list[str] = [
-                                            (
-                                                line[:200] + "..."
-                                                if len(line) > 200
-                                                else line
-                                            )
-                                            for line in lines[-5:]
-                                        ]
-                                        content_preview = (
-                                            "\n".join(first_5)
-                                            + "\n...\n"
-                                            + "\n".join(last_5)
-                                        )
-                                        self.logger.info(
-                                            f"Tool {tool_name} => {total_lines} lines (showing first & last 5):\n{content_preview}"
-                                        )
-                                else:
-                                    self.logger.info(f"Tool {tool_name} => success")
+                                        logger.info(f"Tool {tool_name} => success")
                             elif "error" in result:
-                                error_msg: str = cast(
-                                    str, result["error"].get("errorMessage", "unknown")
-                                )
-                                self.logger.info(
-                                    f"Tool {tool_name} => error: {error_msg}"
-                                )
+                                error_data: object = result["error"]  # pyright: ignore[reportUnknownVariableType]
+                                if isinstance(error_data, dict):
+                                    # Type narrow error_data to dict[str, object] after isinstance check
+                                    error_dict = cast(dict[str, object], error_data)
+                                    tool_error = TypeAdapter(ToolError).validate_python(
+                                        error_dict
+                                    )
+                                    logger.info(
+                                        f"Tool {tool_name} => error: {tool_error['errorMessage']}"
+                                    )
                             else:
-                                self.logger.info(f"Tool {tool_name} => completed")
+                                logger.info(f"Tool {tool_name} => completed")
 
-        except (json.JSONDecodeError, KeyError, TypeError) as e:
-            # If we can't parse the activities, just log a warning and continue
-            self.logger.debug(f"Could not parse agent activities from output: {e}")
+    def _log_content_preview(
+        self, tool_name: str, lines: list[str], total_lines: int
+    ) -> None:
+        """Log content preview for tool results."""
+        if total_lines <= 10:
+            display_lines = [
+                (line[:200] + "..." if len(line) > 200 else line) for line in lines
+            ]
+            content_preview = "\n".join(display_lines)
+            logger.info(f"Tool {tool_name} => {total_lines} lines:\n{content_preview}")
+        else:
+            first_5 = [
+                (line[:200] + "..." if len(line) > 200 else line) for line in lines[:5]
+            ]
+            last_5 = [
+                (line[:200] + "..." if len(line) > 200 else line) for line in lines[-5:]
+            ]
+            content_preview = "\n".join(first_5) + "\n...\n" + "\n".join(last_5)
+            logger.info(
+                f"Tool {tool_name} => {total_lines} lines (showing first & last 5):\n{content_preview}"
+            )
 
-    def _extract_json_from_output(self, output: str) -> dict[str, Any]:  # type: ignore[reportExplicitAny]
+    def _extract_json_from_output(self, output: str) -> JudgeResult:
         """
         Extract JSON from cursor-agent output.
 
@@ -344,19 +397,16 @@ class CursorAgentJudge(Judge):
         """
         try:
             # Parse cursor-agent's response format
-            response: dict[str, Any] = json.loads(output.strip())  # type: ignore[reportExplicitAny]
+            response = TypeAdapter(CursorAgentResponse).validate_python(
+                json.loads(output.strip())
+            )
         except json.JSONDecodeError as e:
             raise NoJsonFromCursorAgentError(
                 f"Failed to parse JSON from cursor-agent output: {e}"
             )
 
         # Extract the result field
-        if "result" not in response:
-            raise InvalidCursorAgentResponseError(
-                "cursor-agent response missing 'result' field"
-            )
-
-        result_text: str = cast(str, response["result"])
+        result_text: str = response["result"]
 
         # The result may be JSON-in-JSON (wrapped in ```json``` blocks)
         if "```json" in result_text:
@@ -374,12 +424,13 @@ class CursorAgentJudge(Judge):
 
         # Parse the extracted JSON
         try:
-            return cast(dict[str, Any], json.loads(json_text))  # type: ignore[reportExplicitAny]
+            return TypeAdapter(JudgeResult).validate_python(json.loads(json_text))
         except json.JSONDecodeError as e:
             raise NoJsonFromCursorAgentError(
                 f"Failed to parse JSON from result field: {e}"
             )
 
+    @override
     def test_connection(self) -> bool:
         """
         Test if cursor-agent is available and working.
