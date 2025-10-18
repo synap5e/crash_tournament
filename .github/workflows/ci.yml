@@ -34,7 +34,7 @@ jobs:
       run: ruff check
 
     - name: Run basedpyright type checking
-      run: basedpyright
+      run: basedpyright --level error
 
     - name: Run pytest
       run: pytest
