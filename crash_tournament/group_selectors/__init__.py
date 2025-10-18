@@ -10,5 +10,6 @@ Available implementations:
 """
 
 from .random_selector import RandomSelector
+from .least_runs_selector import LeastRunsSelector
 
-__all__ = ["RandomSelector"]
+__all__ = ["RandomSelector", "LeastRunsSelector"]

@@ -13,7 +13,13 @@ from typing import TypedDict
 
 from .fetchers.directory_fetcher import DirectoryCrashFetcher
 from .group_selectors.random_selector import RandomSelector
+<<<<<<< Updated upstream
 from .interfaces import CrashFetcher, Judge
+=======
+from .group_selectors.least_runs_selector import LeastRunsSelector
+from .judges.sim_judge import SimulatedJudge
+from .judges.dummy_judge import DummyJudge
+>>>>>>> Stashed changes
 from .judges.cursor_agent_judge import CursorAgentJudge
 from .judges.cursor_agent_streaming_judge import CursorAgentStreamingJudge
 from .judges.dummy_judge import DummyJudge
@@ -35,6 +41,7 @@ class CLIArgs(TypedDict):
     budget: int | None
     workers: int
     judge_type: str
+    selector_type: str
     agent_timeout: float
     noise: float
     debug: bool
@@ -93,6 +100,12 @@ def parse_args() -> Namespace:
         help="Type of judge to use (default: simulated)",
     )
     _ = parser.add_argument(
+        "--selector-type",
+        choices=["random", "least-runs"],
+        default="random",
+        help="Type of selector to use (default: random)"
+    )
+    _ = parser.add_argument(
         "--agent-timeout",
         type=float,
         default=300.0,
@@ -126,6 +139,7 @@ def args_to_typed(ns: Namespace) -> CLIArgs:
         budget=ns.budget,
         workers=ns.workers,
         judge_type=ns.judge_type,
+        selector_type=ns.selector_type,
         agent_timeout=ns.agent_timeout,
         noise=ns.noise,
         debug=ns.debug,
@@ -198,11 +212,17 @@ def wire_components(
     # Create ranker
     logger.info("Creating TrueSkill ranker")
     ranker = TrueSkillRanker()
-
-    # Create selector
-    logger.info("Creating random selector")
-    selector = RandomSelector(ranker)
-
+    
+    # Create selector based on type
+    logger.info(f"Creating {args['selector_type']} selector")
+    if args["selector_type"] == "random":
+        selector = RandomSelector(ranker)
+    elif args["selector_type"] == "least-runs":
+        selector = LeastRunsSelector(ranker)
+    else:
+        logger.error(f"Unknown selector type: {args['selector_type']}")
+        raise ValueError(f"Unknown selector type: {args['selector_type']}")
+    
     # Create judge based on type
     logger.info(f"Creating {args['judge_type']} judge")
     judge: Judge
@@ -320,7 +340,12 @@ def main() -> None:
         print(f"Budget: {args['budget']}")
         print(f"Workers: {args['workers']}")
         print(f"Judge type: {args['judge_type']}")
+<<<<<<< Updated upstream
         if args["judge_type"] == "cursor-agent":
+=======
+        print(f"Selector type: {args['selector_type']}")
+        if args['judge_type'] == "cursor-agent":
+>>>>>>> Stashed changes
             print("Using cursor-agent judge")
             print(f"Agent timeout: {args['agent_timeout']}")
         elif args["judge_type"] == "simulated":

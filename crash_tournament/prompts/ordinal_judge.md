@@ -3,7 +3,7 @@
 You will rank the following crash reports by likely exploitability.
 
 Each crash is described in a file. Read and analyze the complete crash data from each file.
-The crashing input itself is stored next to the file as `{stem}.js`.
+The crashing input itself is stored next to the file as `input.js`.
 
 Note that the crash files are un-minified fuzzer outputs.
 They are NOT human-weaponized, and you may also consider the difficulty in weaponizing the the crash as taking away from its likelyhood of being exploitable.
