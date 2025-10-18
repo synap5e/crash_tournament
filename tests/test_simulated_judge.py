@@ -67,9 +67,9 @@ class TestSimulatedJudge:
         # Assert
         # Should get some variation in ordering
         unique_orderings = set(tuple(ordering) for ordering in results)
-        assert (
-            len(unique_orderings) > 1
-        ), "Should produce different orderings with noise"
+        assert len(unique_orderings) > 1, (
+            "Should produce different orderings with noise"
+        )
 
         # All results should contain all crashes
         for ordered_ids in results:
@@ -138,15 +138,16 @@ class TestSimulatedJudge:
         result = judge.evaluate_matchup(crashes)
 
         # Assert
-        assert (
-            "crash_high" in result.parsed_result["rationale_top"]
-        ), "Rationale should mention crash IDs"
-        assert (
-            "10.0" in result.parsed_result["rationale_top"]
-        ), "Rationale should include ground truth score"
-        assert (
-            "Simulated evaluation" in result.parsed_result["rationale_top"]
-        ), "Should indicate simulated evaluation"
+        rationale_top = str(result.parsed_result["rationale_top"])
+        assert "crash_high" in rationale_top, (
+            "Rationale should mention crash IDs"
+        )
+        assert "10.0" in rationale_top, (
+            "Rationale should include ground truth score"
+        )
+        assert "Simulated evaluation" in rationale_top, (
+            "Should indicate simulated evaluation"
+        )
 
         # Raw output should be informative
         assert "crash_high" in result.raw_output, "Raw output should include crash IDs"
@@ -202,9 +203,9 @@ class TestSimulatedJudge:
         low_noise_unique = len(set(low_noise_results))
         high_noise_unique = len(set(high_noise_results))
 
-        assert (
-            high_noise_unique >= low_noise_unique
-        ), "Higher noise should produce at least as much variance"
+        assert high_noise_unique >= low_noise_unique, (
+            "Higher noise should produce at least as much variance"
+        )
 
     def test_get_ground_truth(self) -> None:
         """Should return ground truth for debugging."""
@@ -250,9 +251,9 @@ class TestSimulatedJudge:
 
         # Act & Assert
         judge_negative = SimulatedJudge(ground_truth, noise=-0.5)
-        assert (
-            judge_negative.get_noise() == 0.0
-        ), "Negative noise should be clamped to 0"
+        assert judge_negative.get_noise() == 0.0, (
+            "Negative noise should be clamped to 0"
+        )
 
         judge_high = SimulatedJudge(ground_truth, noise=1.5)
         assert judge_high.get_noise() == 1.0, "Noise > 1 should be clamped to 1"

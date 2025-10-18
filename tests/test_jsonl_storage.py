@@ -153,9 +153,9 @@ class TestJSONLStorage:
             snapshot = storage.load_snapshot()
 
             # Assert
-            assert (
-                len(observations) == 0
-            ), "Should return empty list for missing observations"
+            assert len(observations) == 0, (
+                "Should return empty list for missing observations"
+            )
             assert snapshot is None, "Should return None for missing snapshot"
 
     def test_observation_count(self) -> None:
@@ -167,9 +167,9 @@ class TestJSONLStorage:
             storage = JSONLStorage(observations_path, snapshot_path)
 
             # Act & Assert
-            assert (
-                storage.get_observation_count() == 0
-            ), "Empty storage should have 0 observations"
+            assert storage.get_observation_count() == 0, (
+                "Empty storage should have 0 observations"
+            )
 
             # Add some observations
             for i in range(3):
@@ -203,9 +203,9 @@ class TestJSONLStorage:
             storage.clear_observations()
 
             # Assert
-            assert (
-                storage.get_observation_count() == 0
-            ), "Should have 0 observations after clear"
+            assert storage.get_observation_count() == 0, (
+                "Should have 0 observations after clear"
+            )
             assert not observations_path.exists(), "Observations file should be deleted"
 
     def test_clear_snapshot(self) -> None:
@@ -242,9 +242,9 @@ class TestJSONLStorage:
 
             # Assert
             assert not snapshot_path.exists(), "Snapshot file should be deleted"
-            assert (
-                storage.load_snapshot() is None
-            ), "Should return None for cleared snapshot"
+            assert storage.load_snapshot() is None, (
+                "Should return None for cleared snapshot"
+            )
 
     def test_metadata_included_in_persisted_data(self) -> None:
         """Persisted data should include timestamp and checksum metadata."""
@@ -333,10 +333,10 @@ class TestJSONLStorage:
 
             # Assert - check judge outputs file
             assert judge_outputs_path.exists(), "Judge outputs file should exist"
-            
+
             with open(judge_outputs_path, "r") as f:
                 data = json.load(f)
-                
+
                 assert data["ordered_ids"] == ["a", "b", "c"]
                 assert data["raw_output"] == "test judge output"
                 assert data["parsed_result"]["rationale_top"] == "a is most exploitable"
@@ -358,7 +358,7 @@ class TestJSONLStorage:
                 parsed_result={"rationale_top": "a wins"},
                 judge_id="judge1",
             )
-            
+
             result2 = OrdinalResult(
                 ordered_ids=["c", "d"],
                 raw_output="second output",
@@ -373,16 +373,16 @@ class TestJSONLStorage:
             # Assert - check both entries exist
             with open(judge_outputs_path, "r") as f:
                 lines = f.readlines()
-                
+
                 assert len(lines) == 2, "Should have 2 entries"
-                
+
                 data1 = json.loads(lines[0])
                 data2 = json.loads(lines[1])
-                
+
                 assert data1["ordered_ids"] == ["a", "b"]
                 assert data1["raw_output"] == "first output"
                 assert data1["judge_id"] == "judge1"
-                
+
                 assert data2["ordered_ids"] == ["c", "d"]
                 assert data2["raw_output"] == "second output"
                 assert data2["judge_id"] == "judge2"
@@ -409,13 +409,13 @@ class TestJSONLStorage:
             # Assert - both files should have the data
             assert observations_path.exists(), "Observations file should exist"
             assert judge_outputs_path.exists(), "Judge outputs file should exist"
-            
+
             # Check observations file
             with open(observations_path, "r") as f:
                 obs_data = json.load(f)
                 assert obs_data["ordered_ids"] == ["x", "y"]
                 assert obs_data["judge_id"] == "matchup_judge"
-            
+
             # Check judge outputs file
             with open(judge_outputs_path, "r") as f:
                 judge_data = json.load(f)

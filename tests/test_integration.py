@@ -122,9 +122,9 @@ class TestIntegration:
             highest_rank = crash_ids.index(highest_score_crash)
             lowest_rank = crash_ids.index(lowest_score_crash)
 
-            assert (
-                highest_rank < lowest_rank
-            ), "High exploitability crash should rank higher than low exploitability crash"
+            assert highest_rank < lowest_rank, (
+                "High exploitability crash should rank higher than low exploitability crash"
+            )
 
             # Check that storage contains observations
             observations = list(storage.load_observations())
@@ -314,15 +314,15 @@ class TestIntegration:
             for rankings in rankings_results:
                 high_rank = list(rankings.keys()).index(high_exploit_crash)
                 low_rank = list(rankings.keys()).index(low_exploit_crash)
-                assert (
-                    high_rank < low_rank
-                ), "High exploit crash should rank higher than low exploit crash"
+                assert high_rank < low_rank, (
+                    "High exploit crash should rank higher than low exploit crash"
+                )
 
             # Later runs should have more observations
             observations = list(storage.load_observations())
-            assert (
-                len(observations) >= 9
-            ), "Should have accumulated observations across runs"
+            assert len(observations) >= 9, (
+                "Should have accumulated observations across runs"
+            )
 
     @pytest.mark.integration
     @pytest.mark.xfail(reason="Requires cursor-agent CLI tool")
@@ -401,9 +401,9 @@ class TestIntegration:
 
             # Assert
             assert len(rankings) == 3, "Should rank all crashes"
-            assert (
-                len(list(storage.load_observations())) > 0
-            ), "Should store observations"
+            assert len(list(storage.load_observations())) > 0, (
+                "Should store observations"
+            )
 
             # Verify observations have actual content from cursor-agent
             observations = list(storage.load_observations())
@@ -548,12 +548,12 @@ class TestIntegration:
             rankings = orchestrator.run()
 
             # Assert
-            assert (
-                len(rankings) == 2
-            ), "Should handle errors gracefully and still produce rankings"
+            assert len(rankings) == 2, (
+                "Should handle errors gracefully and still produce rankings"
+            )
             # Check that all crashes are included (using actual crash IDs)
             crash_ids = list(rankings.keys())
             assert len(crash_ids) == 2, "Should include all crashes"
-            assert all(
-                "crash" in cid for cid in crash_ids
-            ), "Should include crash objects"
+            assert all("crash" in cid for cid in crash_ids), (
+                "Should include crash objects"
+            )

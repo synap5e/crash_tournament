@@ -61,9 +61,9 @@ class TestTrueSkillRanker:
 
         # All scores should have changed
         for crash_id in ["a", "b", "c", "d"]:
-            assert (
-                final_scores[crash_id] != initial_scores[crash_id]
-            ), f"{crash_id} score should change"
+            assert final_scores[crash_id] != initial_scores[crash_id], (
+                f"{crash_id} score should change"
+            )
 
         # Final ordering should match input ordering
         assert final_scores["a"] > final_scores["b"], "a should rank higher than b"
@@ -127,9 +127,9 @@ class TestTrueSkillRanker:
 
         # Assert
         for crash_id in ["a", "b", "c"]:
-            assert ranker1.get_score(crash_id) == ranker2.get_score(
-                crash_id
-            ), f"Scores should match for {crash_id}"
+            assert ranker1.get_score(crash_id) == ranker2.get_score(crash_id), (
+                f"Scores should match for {crash_id}"
+            )
             assert ranker1.get_uncertainty(crash_id) == ranker2.get_uncertainty(
                 crash_id
             ), f"Uncertainties should match for {crash_id}"
@@ -220,9 +220,9 @@ class TestTrueSkillRanker:
         assert "z" in snapshot["ratings"], "Snapshot should contain z"
 
         for crash_id in ["x", "y", "z"]:
-            assert (
-                "mu" in snapshot["ratings"][crash_id]
-            ), f"Snapshot should contain mu for {crash_id}"
-            assert (
-                "sigma" in snapshot["ratings"][crash_id]
-            ), f"Snapshot should contain sigma for {crash_id}"
+            assert "mu" in snapshot["ratings"][crash_id], (
+                f"Snapshot should contain mu for {crash_id}"
+            )
+            assert "sigma" in snapshot["ratings"][crash_id], (
+                f"Snapshot should contain sigma for {crash_id}"
+            )

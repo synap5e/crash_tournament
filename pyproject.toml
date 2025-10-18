@@ -7,7 +7,7 @@ name = "crash-tournament"
 version = "0.1.0"
 description = "Adaptive Comparative Judging System for crash report ranking"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
     "pytest>=8.4.2",
     "trueskill>=0.4.5",

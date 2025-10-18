@@ -62,12 +62,12 @@ class TestDirectoryCrashFetcher:
 
             # Check that all crashes have the expected structure
             for crash in crashes:
-                assert crash.crash_id.endswith(
-                    "_crash"
-                ), f"Crash ID should end with '_crash': {crash.crash_id}"
-                assert crash.file_path.endswith(
-                    "crash.json"
-                ), f"File path should end with 'crash.json': {crash.file_path}"
+                assert crash.crash_id.endswith("_crash"), (
+                    f"Crash ID should end with '_crash': {crash.crash_id}"
+                )
+                assert crash.file_path.endswith("crash.json"), (
+                    f"File path should end with 'crash.json': {crash.file_path}"
+                )
 
     def test_skips_invalid_files(self) -> None:
         """Should gracefully handle bad JSON files."""
@@ -102,18 +102,18 @@ class TestDirectoryCrashFetcher:
             crashes = list(fetcher.list_crashes())
 
             # Assert
-            assert (
-                len(crashes) == 3
-            ), "Should load all files (valid, invalid, incomplete)"
+            assert len(crashes) == 3, (
+                "Should load all files (valid, invalid, incomplete)"
+            )
             # All files should be loaded regardless of JSON validity
             crash_ids = [c.crash_id for c in crashes]
             assert any("valid" in cid for cid in crash_ids), "Should include valid file"
-            assert any(
-                "invalid" in cid for cid in crash_ids
-            ), "Should include invalid file"
-            assert any(
-                "incomplete" in cid for cid in crash_ids
-            ), "Should include incomplete file"
+            assert any("invalid" in cid for cid in crash_ids), (
+                "Should include invalid file"
+            )
+            assert any("incomplete" in cid for cid in crash_ids), (
+                "Should include incomplete file"
+            )
 
     def test_caching_works(self) -> None:
         """Multiple calls should not re-read files."""
@@ -138,9 +138,9 @@ class TestDirectoryCrashFetcher:
             # Assert
             assert len(crashes1) == 1, "First call should load 1 crash"
             assert len(crashes2) == 1, "Second call should load 1 crash"
-            assert (
-                crashes1[0].crash_id == crashes2[0].crash_id
-            ), "Should return same crash"
+            assert crashes1[0].crash_id == crashes2[0].crash_id, (
+                "Should return same crash"
+            )
 
     def test_get_crash_by_id(self) -> None:
         """Should retrieve specific crash by ID."""
@@ -164,12 +164,12 @@ class TestDirectoryCrashFetcher:
             crash = crashes[0]
 
             # Assert
-            assert crash.crash_id.endswith(
-                "_specific"
-            ), f"Crash ID should end with '_specific': {crash.crash_id}"
-            assert crash.file_path.endswith(
-                "specific.json"
-            ), f"File path should end with 'specific.json': {crash.file_path}"
+            assert crash.crash_id.endswith("_specific"), (
+                f"Crash ID should end with '_specific': {crash.crash_id}"
+            )
+            assert crash.file_path.endswith("specific.json"), (
+                f"File path should end with 'specific.json': {crash.file_path}"
+            )
 
     def test_get_crash_by_id_not_found(self) -> None:
         """Should raise KeyError for non-existent crash ID."""
@@ -207,9 +207,9 @@ class TestDirectoryCrashFetcher:
             assert len(crash_ids) == 3, "Should return 3 crash IDs"
             # Crash IDs will be based on temp directory name and file stem
             for crash_id in crash_ids:
-                assert crash_id.endswith(
-                    ("_crash_0", "_crash_1", "_crash_2")
-                ), f"Unexpected crash ID format: {crash_id}"
+                assert crash_id.endswith(("_crash_0", "_crash_1", "_crash_2")), (
+                    f"Unexpected crash ID format: {crash_id}"
+                )
 
     def test_reload_clears_cache(self) -> None:
         """Reload should clear cache and re-read files."""
@@ -251,9 +251,9 @@ class TestDirectoryCrashFetcher:
             # Crash IDs will be based on temp directory name and file stem
             assert len(crash_ids) == 2, "Should have 2 unique crash IDs"
             for crash_id in crash_ids:
-                assert crash_id.endswith(
-                    ("_initial", "_new")
-                ), f"Unexpected crash ID format: {crash_id}"
+                assert crash_id.endswith(("_initial", "_new")), (
+                    f"Unexpected crash ID format: {crash_id}"
+                )
 
     def test_get_crash_count(self) -> None:
         """Should return correct count of crashes."""
@@ -263,9 +263,9 @@ class TestDirectoryCrashFetcher:
             fetcher = DirectoryCrashFetcher(crashes_dir)
 
             # Act & Assert
-            assert (
-                fetcher.get_crash_count() == 0
-            ), "Empty directory should have 0 crashes"
+            assert fetcher.get_crash_count() == 0, (
+                "Empty directory should have 0 crashes"
+            )
 
             # Add some crashes
             for i in range(3):
@@ -377,17 +377,17 @@ class TestDirectoryCrashFetcher:
 
             # Assert
             # DirectoryCrashFetcher uses rglob, so it will read subdirectories too
-            assert (
-                len(crashes) == 2
-            ), "Should read files in main directory and subdirectories"
+            assert len(crashes) == 2, (
+                "Should read files in main directory and subdirectories"
+            )
             # Check that both files are loaded (crash IDs will be based on temp directory name)
             crash_ids = [c.crash_id for c in crashes]
-            assert any(
-                "main" in cid for cid in crash_ids
-            ), "Should include main directory file"
-            assert any(
-                "sub" in cid for cid in crash_ids
-            ), "Should include subdirectory file"
+            assert any("main" in cid for cid in crash_ids), (
+                "Should include main directory file"
+            )
+            assert any("sub" in cid for cid in crash_ids), (
+                "Should include subdirectory file"
+            )
 
     def test_handles_different_file_patterns(self) -> None:
         """Should respect custom file pattern."""
@@ -419,9 +419,9 @@ class TestDirectoryCrashFetcher:
             # Assert
             assert len(crashes) == 1, "Should only read .txt files"
             # Crash ID will be based on temp directory name and file stem
-            assert crashes[0].crash_id.endswith(
-                "_crash"
-            ), f"Crash ID should end with '_crash': {crashes[0].crash_id}"
-            assert crashes[0].file_path.endswith(
-                "crash.txt"
-            ), f"File path should end with 'crash.txt': {crashes[0].file_path}"
+            assert crashes[0].crash_id.endswith("_crash"), (
+                f"Crash ID should end with '_crash': {crashes[0].crash_id}"
+            )
+            assert crashes[0].file_path.endswith("crash.txt"), (
+                f"File path should end with 'crash.txt': {crashes[0].file_path}"
+            )

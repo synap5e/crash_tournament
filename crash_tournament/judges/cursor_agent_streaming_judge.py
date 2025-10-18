@@ -224,7 +224,9 @@ class CursorAgentStreamingJudge(CursorAgentJudge):
                                         success_data: object = result["success"]  # pyright: ignore[reportUnknownVariableType]
                                         if isinstance(success_data, dict):
                                             # Type narrow success_data to dict[str, object] after isinstance check
-                                            success_dict = cast(dict[str, object], success_data)
+                                            success_dict = cast(
+                                                dict[str, object], success_data
+                                            )
                                             if "files" in success_dict:
                                                 files_result = TypeAdapter(
                                                     FilesResult
@@ -252,7 +254,9 @@ class CursorAgentStreamingJudge(CursorAgentJudge):
                                         error_data: object = result["error"]  # pyright: ignore[reportUnknownVariableType]
                                         if isinstance(error_data, dict):
                                             # Type narrow error_data to dict[str, object] after isinstance check
-                                            error_dict = cast(dict[str, object], error_data)
+                                            error_dict = cast(
+                                                dict[str, object], error_data
+                                            )
                                             tool_error = TypeAdapter(
                                                 ToolError
                                             ).validate_python(error_dict)
