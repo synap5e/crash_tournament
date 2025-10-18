@@ -23,6 +23,11 @@ class TrueSkillRanker(Ranker):
     
     Converts k-way ordinal results to k-1 sequential pairwise wins
     and applies proper weighting to avoid overconfidence.
+    
+    Thread Safety: This ranker is designed to be used only from the main thread.
+    The orchestrator ensures thread safety by calling all ranker operations
+    (update_with_ordinal, get_score, etc.) from the main thread, while using
+    ThreadPoolExecutor only for judge evaluations.
     """
     
     def __init__(self, mu: float = 25.0, sigma: float = 8.333333333333334, tau: float = 0.08333333333333334):
@@ -58,6 +63,14 @@ class TrueSkillRanker(Ranker):
         self.logger.info(f"TrueSkill ranker initialized: mu={mu}, sigma={sigma}, tau={tau}")
     
     def _get_or_create_rating(self, crash_id: str) -> Rating:
+        """Get existing rating or create new one with default values.
+        
+        Args:
+            crash_id: Unique identifier for the crash
+            
+        Returns:
+            TrueSkill Rating object for the crash
+        """
         """Get existing rating or create default one for unseen crash."""
         if crash_id not in self.ratings:
             self.ratings[crash_id] = Rating(mu=self.mu, sigma=self.sigma)  # type: ignore[arg-type]
@@ -113,9 +126,11 @@ class TrueSkillRanker(Ranker):
                 adjusted_tau = self.tau * weight if weight > 0 else self.tau
                 
                 # Update ratings with adjusted tau
-                # NOTE: This modifies global TrueSkill state, which can cause race conditions
-                # in concurrent usage. Consider using thread-local storage or instance-based
-                # configuration for thread safety.
+                # NOTE: This modifies global TrueSkill state, but it's NOT a thread safety issue
+                # because TrueSkillRanker is only accessed from the main thread. The orchestrator
+                # uses ThreadPoolExecutor for judge evaluations, but all ranker operations
+                # (update_with_ordinal, get_score, etc.) are explicitly called from the main
+                # thread in _process_completed_futures() to ensure thread safety.
                 original_tau = self.tau
                 _ = setup(mu=self.mu, sigma=self.sigma, tau=adjusted_tau)
                 

@@ -14,6 +14,7 @@ from .cursor_agent_judge import (
     CursorAgentJudge,
     NoJsonFromCursorAgentError
 )
+from ..interfaces import ValidationError
 
 
 
@@ -176,10 +177,10 @@ class CursorAgentStreamingJudge(CursorAgentJudge):
             _ = process.wait()
             
             if result_message is None:
-                raise ValueError("No result message found in cursor-agent stream")
+                raise ValidationError("No result message found in cursor-agent stream")
             
             if result_message.get("subtype") != "success":
-                raise ValueError(f"cursor-agent failed: {result_message.get('subtype')}")
+                raise ValidationError(f"cursor-agent failed: {result_message.get('subtype')}")
             
             # Extract the result content
             result_content: str = cast(str, result_message.get("result", ""))

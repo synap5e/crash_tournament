@@ -8,7 +8,7 @@ import random
 from collections.abc import Sequence
 from typing import override
 
-from ..interfaces import Judge
+from ..interfaces import Judge, ValidationError
 from ..models import Crash, OrdinalResult
 
 
@@ -47,7 +47,7 @@ class DummyJudge(Judge):
             OrdinalResult with ordered crash IDs
         """
         if not crashes:
-            raise ValueError("Cannot evaluate empty group")
+            raise ValidationError("Cannot evaluate empty group")
         
         crash_ids = [crash.crash_id for crash in crashes]
         
@@ -59,7 +59,7 @@ class DummyJudge(Judge):
             ordered_ids = crash_ids.copy()
             random.shuffle(ordered_ids)
         else:
-            raise ValueError(f"Unknown mode: {self.mode}")
+            raise ValidationError(f"Unknown mode: {self.mode}")
         
         # Generate simple rationale
         rationale = f"Dummy {self.mode} ranking of {len(crashes)} crashes"
