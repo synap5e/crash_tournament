@@ -6,7 +6,7 @@ Simple stateless selector for testing/baseline.
 
 import random
 from collections.abc import Sequence
-from typing import override
+from typing_extensions import override
 
 from ..interfaces import Ranker, Selector
 

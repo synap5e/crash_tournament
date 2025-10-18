@@ -8,12 +8,10 @@ Uses just-in-time work queue pattern for maximum adaptiveness.
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED, Future
 from dataclasses import dataclass
 from collections.abc import Sequence
-from typing import TYPE_CHECKING
+from loguru._logger import Logger
 
-if TYPE_CHECKING:
-    from loguru import Logger
-
-from .interfaces import CrashFetcher, Judge, Storage, Ranker, Selector, SystemState, ConfigurationError
+from .interfaces import CrashFetcher, Judge, Storage, Ranker, Selector, SystemState
+from .exceptions import ConfigurationError
 from .models import Crash, OrdinalResult
 from .logging_config import get_logger
 

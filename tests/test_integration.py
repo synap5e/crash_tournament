@@ -15,7 +15,6 @@ from crash_tournament.rankers.trueskill_ranker import TrueSkillRanker
 from crash_tournament.group_selectors.random_selector import RandomSelector
 from crash_tournament.judges.sim_judge import SimulatedJudge
 from crash_tournament.judges.cursor_agent_judge import CursorAgentJudge
-from crash_tournament.models import Crash
 from crash_tournament.orchestrator import Orchestrator, RunConfig
 
 

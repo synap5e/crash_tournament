@@ -11,7 +11,7 @@ from collections.abc import Iterable
 from typing import Any, override, cast, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from loguru import Logger
+    from loguru._logger import Logger
 
 from ..interfaces import Storage, SystemState
 from ..models import OrdinalResult
@@ -134,7 +134,7 @@ class JSONLStorage(Storage):
             self.logger.error("Invalid snapshot format - missing required SystemState fields")
             return None
         
-        self.logger.info(f"Successfully loaded snapshot with ranker_state and runtime_state")
+        self.logger.info("Successfully loaded snapshot with ranker_state and runtime_state")
         # Cast to SystemState since we've validated the structure
         return cast(SystemState, cast(object, data))
     

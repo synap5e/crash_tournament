@@ -5,7 +5,7 @@ All interfaces are synchronous to avoid asyncio complexity in core interfaces.
 """
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Sequence
 from typing import TypedDict
 from .models import Crash, OrdinalResult
 
@@ -30,19 +30,6 @@ class SystemState(TypedDict):
     runtime_state: dict[str, int]  # evaluated_matchups, etc.
 
 
-class JudgeError(Exception):
-    """Base exception for all judge-related errors."""
-    pass
-
-
-class ValidationError(Exception):
-    """Base exception for validation-related errors."""
-    pass
-
-
-class ConfigurationError(Exception):
-    """Base exception for configuration-related errors."""
-    pass
 
 
 class CrashFetcher(ABC):

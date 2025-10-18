@@ -6,7 +6,7 @@ Reads crashes from directory structure with JSON files.
 
 from pathlib import Path
 from collections.abc import Iterable
-from typing import override
+from typing_extensions import override
 
 from ..interfaces import CrashFetcher
 from ..models import Crash

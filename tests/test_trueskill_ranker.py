@@ -4,7 +4,6 @@ Tests for TrueSkillRanker implementation.
 Focus on k-way to pairwise conversion and ranking updates.
 """
 
-import pytest
 from crash_tournament.rankers.trueskill_ranker import TrueSkillRanker
 from crash_tournament.models import OrdinalResult
 
