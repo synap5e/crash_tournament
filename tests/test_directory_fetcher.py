@@ -380,4 +380,5 @@ class TestDirectoryCrashFetcher:
             
             # Assert
             assert len(crashes) == 1, "Should only read .txt files"
-            assert crashes[0].crash_id == "txt_crash", "Should read .txt file"
+            # Directory-based ID will be like "crash" (from crash.txt)
+            assert crashes[0].crash_id == "crash", "Should read .txt file"

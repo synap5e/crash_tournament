@@ -9,9 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED, Future
 from dataclasses import dataclass
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from loguru import Logger
+from loguru import Logger
 
 from .interfaces import CrashFetcher, Judge, Storage, Ranker, Selector, SystemState, ConfigurationError
 from .models import Crash, OrdinalResult

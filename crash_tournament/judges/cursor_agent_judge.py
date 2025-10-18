@@ -10,9 +10,7 @@ from pathlib import Path
 from collections.abc import Sequence
 from typing import Any, TypedDict, cast, TYPE_CHECKING
 from typing_extensions import NotRequired, override
-
-if TYPE_CHECKING:
-    from loguru import Logger
+from loguru import Logger
 
 from ..interfaces import Judge, JudgeError
 from ..models import ValidationError
