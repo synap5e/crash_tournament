@@ -5,139 +5,158 @@ Parses arguments, validates config, and wires components.
 """
 
 import argparse
-import os
+import shutil
 import sys
 from pathlib import Path
+from argparse import Namespace
+from typing import TypedDict
 
-from .interfaces import CrashFetcher, Judge, Storage, Ranker, Selector
 from .orchestrator import Orchestrator, RunConfig
 from .fetchers.directory_fetcher import DirectoryCrashFetcher
 from .storage.jsonl_storage import JSONLStorage
 from .rankers.trueskill_ranker import TrueSkillRanker
-from .group_selectors.uncertainty_selector import UncertaintySelector
+from .group_selectors.random_selector import RandomSelector
 from .judges.sim_judge import SimulatedJudge
 from .judges.dummy_judge import DummyJudge
 from .judges.cursor_agent_judge import CursorAgentJudge
 from .judges.cursor_agent_streaming_judge import CursorAgentStreamingJudge
 from .logging_config import setup_logging, get_logger
+from .interfaces import Judge, CrashFetcher
 
 
-def parse_args():
+class CLIArgs(TypedDict):
+    """Typed representation of parsed CLI arguments."""
+    crashes_dir: str
+    crashes_pattern: str
+    output_dir: str
+    matchup_size: int
+    snapshot_every: int
+    budget: int | None
+    workers: int
+    judge_type: str
+    agent_timeout: float
+    noise: float
+    debug: bool
+    log_level: str
+
+
+def parse_args() -> Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
         description="Crash Tournament - Adaptive Comparative Judging System"
     )
     
     # Required arguments
-    parser.add_argument(
+    _ = parser.add_argument(
         "--crashes-dir",
         required=True,
         help="Path to crash corpus directory"
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--crashes-pattern",
         default="*.json",
         help="Pattern for finding crash files (default: *.json)"
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--output-dir", 
         required=True,
         help="Directory for JSONL/snapshots output"
     )
     
     # Optional arguments
-    parser.add_argument(
-        "--k",
+    _ = parser.add_argument(
+        "--matchup-size",
         type=int,
         default=4,
-        help="Group size for comparisons (default: 4)"
+        help="Number of crashes per matchup (default: 4)"
     )
-    parser.add_argument(
-        "--seed-groups",
+    _ = parser.add_argument(
+        "--snapshot-every",
         type=int,
-        default=200,
-        help="Number of seed groups (default: 200)"
+        default=10,
+        help="Save snapshot every N matchups (default: 10)"
     )
-    parser.add_argument(
-        "--groups-per-round",
-        type=int,
-        default=50,
-        help="Groups per uncertainty round (default: 50)"
-    )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--budget",
         type=int,
-        help="Total judge calls allowed (required or computed from rounds)"
+        help="Total judge calls allowed (default: matchup_size * 250 if not specified)"
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--workers",
         type=int,
         default=1,
         help="Number of worker threads for parallel evaluation (default: 1)"
     )
-    parser.add_argument(
-        "--resume",
-        action="store_true",
-        help="Load snapshot and continue from previous run"
-    )
     
     # Judge selection
-    parser.add_argument(
+    _ = parser.add_argument(
         "--judge-type",
         choices=["simulated", "dummy", "cursor-agent", "cursor-agent-streaming"],
         default="simulated",
         help="Type of judge to use (default: simulated)"
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--agent-timeout",
         type=float,
         default=300.0,
         help="Timeout for cursor-agent in seconds (default: 300)"
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--noise",
         type=float,
         default=0.1,
         help="Noise level for simulated judge (0-1, default: 0.1)"
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--debug",
         action="store_true",
         help="Enable debug logging"
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--log-level",
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         default="INFO",
         help="Set logging level (default: INFO)"
     )
-    parser.add_argument(
-        "--temperature",
-        type=float,
-        default=1.0,
-        help="Temperature for probabilistic uncertainty sampling (default: 1.0, lower=focuses on highest uncertainty, higher=flattens uncertainty weighting)"
-    )
     
     return parser.parse_args()
 
 
-def validate_config(args):
+def args_to_typed(ns: Namespace) -> CLIArgs:
+    """Convert argparse Namespace to typed CLIArgs."""
+    return CLIArgs(
+        crashes_dir=ns.crashes_dir,
+        crashes_pattern=ns.crashes_pattern,
+        output_dir=ns.output_dir,
+        matchup_size=ns.matchup_size,
+        snapshot_every=ns.snapshot_every,
+        budget=ns.budget,
+        workers=ns.workers,
+        judge_type=ns.judge_type,
+        agent_timeout=ns.agent_timeout,
+        noise=ns.noise,
+        debug=ns.debug,
+        log_level=ns.log_level,
+    )
+
+
+def validate_config(args: CLIArgs) -> None:
     """Validate configuration parameters."""
     logger = get_logger("validate_config")
     
-    # Check k range per doc line 9
-    if not (2 <= args.k <= 7):
-        logger.error(f"k must be between 2 and 7, got {args.k}")
-        print(f"Error: k must be between 2 and 7, got {args.k}")
+    # Check matchup_size range per doc line 9
+    if not (2 <= args["matchup_size"] <= 7):
+        logger.error(f"matchup_size must be between 2 and 7, got {args['matchup_size']}")
+        print(f"Error: matchup_size must be between 2 and 7, got {args['matchup_size']}")
         sys.exit(1)
     
     # Ensure output directory exists
-    output_dir = Path(args.output_dir)
+    output_dir = Path(args["output_dir"])
     output_dir.mkdir(parents=True, exist_ok=True)
     logger.info(f"Output directory: {output_dir}")
     
     # Check crashes directory exists
-    crashes_dir = Path(args.crashes_dir)
+    crashes_dir = Path(args["crashes_dir"])
     if not crashes_dir.exists():
         logger.error(f"Crashes directory does not exist: {crashes_dir}")
         print(f"Error: crashes directory does not exist: {crashes_dir}")
@@ -146,24 +165,31 @@ def validate_config(args):
     logger.info(f"Crashes directory: {crashes_dir}")
     
     # Compute budget if not provided
-    if args.budget is None:
-        # Estimate based on seed groups + some uncertainty rounds
-        args.budget = args.seed_groups + (args.groups_per_round * 10)
-        logger.info(f"Computed budget: {args.budget}")
-        print(f"Computed budget: {args.budget}")
+    if args["budget"] is None:
+        # Reasonable default based on matchup size
+        args["budget"] = args["matchup_size"] * 250
+        logger.info(f"Computed budget: {args['budget']}")
+        print(f"Computed budget: {args['budget']}")
 
 
-def wire_components(args):
+def wire_components(args: CLIArgs) -> tuple[
+    DirectoryCrashFetcher,
+    Judge,
+    JSONLStorage,
+    TrueSkillRanker,
+    RandomSelector,
+    RunConfig
+]:
     """Wire dependency injection components."""
     logger = get_logger("wire_components")
     
     # Create fetcher
     logger.info("Creating crash fetcher")
-    fetcher = DirectoryCrashFetcher(Path(args.crashes_dir), pattern=args.crashes_pattern)
+    fetcher = DirectoryCrashFetcher(Path(args["crashes_dir"]), pattern=args["crashes_pattern"])
     
     # Create storage
     logger.info("Creating storage")
-    output_dir = Path(args.output_dir)
+    output_dir = Path(args["output_dir"])
     observations_path = output_dir / "observations.jsonl"
     snapshot_path = output_dir / "snapshot.json"
     storage = JSONLStorage(observations_path, snapshot_path)
@@ -174,11 +200,11 @@ def wire_components(args):
     
     # Create selector
     logger.info("Creating uncertainty selector")
-    selector = UncertaintySelector(ranker, temperature=args.temperature)
+    selector = RandomSelector(ranker)
     
     # Create judge based on type
-    logger.info(f"Creating {args.judge_type} judge")
-    if args.judge_type == "simulated":
+    logger.info(f"Creating {args['judge_type']} judge")
+    if args["judge_type"] == "simulated":
         # For simulated judge, we need ground truth scores
         # For now, create a simple ground truth based on crash IDs
         crashes = list(fetcher.list_crashes())
@@ -186,37 +212,43 @@ def wire_components(args):
         for i, crash in enumerate(crashes):
             # Simple ground truth: higher ID number = higher exploitability
             ground_truth[crash.crash_id] = float(i) / len(crashes)
-        judge = SimulatedJudge(ground_truth, noise=args.noise)
-        logger.info(f"Simulated judge created with {len(ground_truth)} crashes, noise={args.noise}")
-    elif args.judge_type == "dummy":
+        judge = SimulatedJudge(ground_truth, noise=args["noise"])
+        logger.info(f"Simulated judge created with {len(ground_truth)} crashes, noise={args['noise']}")
+    elif args["judge_type"] == "dummy":
         judge = DummyJudge(mode="deterministic")
         logger.info("Dummy judge created")
-    elif args.judge_type == "cursor-agent":
-        judge = CursorAgentJudge(timeout=args.agent_timeout)
-        logger.info(f"Cursor agent judge created with timeout: {args.agent_timeout}")
-    elif args.judge_type == "cursor-agent-streaming":
-        judge = CursorAgentStreamingJudge(timeout=args.agent_timeout)
-        logger.info(f"Cursor agent streaming judge created with timeout: {args.agent_timeout}")
+    elif args["judge_type"] == "cursor-agent":
+        judge = CursorAgentJudge(timeout=args["agent_timeout"])
+        logger.info(f"Cursor agent judge created with timeout: {args['agent_timeout']}")
+    elif args["judge_type"] == "cursor-agent-streaming":
+        judge = CursorAgentStreamingJudge(timeout=args["agent_timeout"])
+        logger.info(f"Cursor agent streaming judge created with timeout: {args['agent_timeout']}")
     else:
-        logger.error(f"Unknown judge type: {args.judge_type}")
-        raise ValueError(f"Unknown judge type: {args.judge_type}")
+        logger.error(f"Unknown judge type: {args['judge_type']}")
+        raise ValueError(f"Unknown judge type: {args['judge_type']}")
     
     # Build configuration
     logger.info("Creating run configuration")
+    # Budget is guaranteed to be set by validate_config
+    budget_value = args["budget"]
+    assert budget_value is not None, "Budget must be set by validate_config"
     config = RunConfig(
-        k=args.k,
-        seed_groups=args.seed_groups,
-        groups_per_round=args.groups_per_round,
-        budget=args.budget,
-        max_workers=args.workers,
+        matchup_size=args["matchup_size"],
+        budget=budget_value,
+        max_workers=args["workers"],
+        snapshot_every=args["snapshot_every"],
     )
     
-    logger.info(f"Configuration: k={config.k}, seed_groups={config.seed_groups}, budget={config.budget}")
+    logger.info(f"Configuration: matchup_size={config.matchup_size}, budget={config.budget}")
     
     return fetcher, judge, storage, ranker, selector, config
 
 
-def create_ranked_directory(rankings, fetcher, output_dir):
+def create_ranked_directory(
+    rankings: dict[str, float],
+    fetcher: CrashFetcher,
+    output_dir: Path
+) -> None:
     """
     Create a ranked directory with symlinks to crashes in rank order.
     
@@ -231,7 +263,6 @@ def create_ranked_directory(rankings, fetcher, output_dir):
     ranked_dir = output_dir / "ranked"
     if ranked_dir.exists():
         # Clear all existing symlinks
-        import shutil
         shutil.rmtree(ranked_dir)
         logger.info(f"Cleared existing ranked directory: {ranked_dir}")
     
@@ -239,7 +270,7 @@ def create_ranked_directory(rankings, fetcher, output_dir):
     logger.info(f"Created ranked directory: {ranked_dir}")
     
     # Create symlinks for each ranked crash
-    for rank, (crash_id, score) in enumerate(rankings.items(), 1):
+    for rank, (crash_id, _) in enumerate(rankings.items(), 1):
         # Get the crash object to find the file path
         crash = fetcher.get_crash(crash_id)
         
@@ -258,14 +289,15 @@ def create_ranked_directory(rankings, fetcher, output_dir):
     print(f"Created ranked directory with {len(rankings)} symlinks: {ranked_dir}")
 
 
-def main():
+def main() -> None:
     """Main CLI entry point."""
     try:
         # Parse and validate arguments
-        args = parse_args()
+        raw_args = parse_args()
+        args = args_to_typed(raw_args)
         
         # Setup logging
-        setup_logging(level=args.log_level, debug=args.debug)
+        setup_logging(level=args["log_level"], debug=args["debug"])
         logger = get_logger("main")
         
         logger.info("Starting Crash Tournament - Adaptive Comparative Judging System")
@@ -273,21 +305,18 @@ def main():
         
         print("Crash Tournament - Adaptive Comparative Judging System")
         print("=" * 60)
-        print(f"Crashes directory: {args.crashes_dir}")
-        print(f"Output directory: {args.output_dir}")
-        print(f"Group size (k): {args.k}")
-        print(f"Seed groups: {args.seed_groups}")
-        print(f"Groups per round: {args.groups_per_round}")
-        print(f"Budget: {args.budget}")
-        print(f"Workers: {args.workers}")
-        print(f"Resume: {args.resume}")
-        print(f"Temperature: {args.temperature}")
-        print(f"Judge type: {args.judge_type}")
-        if args.judge_type == "cursor-agent":
-            print(f"Using cursor-agent judge")
-            print(f"Agent timeout: {args.agent_timeout}")
-        elif args.judge_type == "simulated":
-            print(f"Noise level: {args.noise}")
+        print(f"Crashes directory: {args['crashes_dir']}")
+        print(f"Output directory: {args['output_dir']}")
+        print(f"Matchup size: {args['matchup_size']}")
+        print(f"Snapshot every: {args['snapshot_every']}")
+        print(f"Budget: {args['budget']}")
+        print(f"Workers: {args['workers']}")
+        print(f"Judge type: {args['judge_type']}")
+        if args['judge_type'] == "cursor-agent":
+            print("Using cursor-agent judge")
+            print(f"Agent timeout: {args['agent_timeout']}")
+        elif args['judge_type'] == "simulated":
+            print(f"Noise level: {args['noise']}")
         print("=" * 60)
         
         # Wire components
@@ -303,7 +332,7 @@ def main():
             ranker=ranker,
             selector=selector,
             config=config,
-            output_dir=Path(args.output_dir),
+            output_dir=str(Path(args["output_dir"])),
         )
         
         # Run tournament
@@ -319,19 +348,17 @@ def main():
         # Use prettytable for nice formatting (consistent with milestone updates)
         from prettytable import PrettyTable
         table = PrettyTable()
-        table.field_names = ["Rank", "Crash ID", "Score", "Uncertainty", "Seed Evals", "Adaptive Evals", "Win%", "Avg Rank"]
+        table.field_names = ["Rank", "Crash ID", "Score", "Uncertainty", "Evals", "Win%", "Avg Rank"]
         table.align["Rank"] = "r"
         table.align["Score"] = "r"
         table.align["Uncertainty"] = "r"
-        table.align["Seed Evals"] = "r"
-        table.align["Adaptive Evals"] = "r"
+        table.align["Evals"] = "r"
         table.align["Win%"] = "r"
         table.align["Avg Rank"] = "r"
         
         for i, (crash_id, score) in enumerate(rankings.items(), 1):
             uncertainty = orchestrator.ranker.get_uncertainty(crash_id)
-            seed_evals = orchestrator.ranker.get_seed_eval_count(crash_id)
-            adaptive_evals = orchestrator.ranker.get_adaptive_eval_count(crash_id)
+            total_evals = orchestrator.ranker.get_total_eval_count(crash_id)
             win_pct = orchestrator.ranker.get_win_percentage(crash_id)
             avg_rank = orchestrator.ranker.get_average_ranking(crash_id)
             table.add_row([
@@ -339,8 +366,7 @@ def main():
                 crash_id, 
                 f"{score:.3f}",
                 f"{uncertainty:.3f}",
-                seed_evals,
-                adaptive_evals,
+                total_evals,
                 f"{win_pct:.1f}%",
                 f"{avg_rank:.1f}"
             ])
@@ -348,7 +374,7 @@ def main():
         print(table)
         
         # Create ranked directory with symlinks
-        create_ranked_directory(rankings, orchestrator.fetcher, Path(args.output_dir))
+        create_ranked_directory(rankings, orchestrator.fetcher, Path(args["output_dir"]))
         
         print("\nTournament completed successfully!")
         

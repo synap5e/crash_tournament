@@ -41,7 +41,10 @@ class TestDirectoryCrashFetcher:
             ]
             
             for i, data in enumerate(crash_data):
-                crash_file = crashes_dir / f"crash_{i:03d}.json"
+                # Create subdirectory for each crash (DirectoryCrashFetcher expects this)
+                crash_dir = crashes_dir / f"crash_{i:03d}"
+                crash_dir.mkdir()
+                crash_file = crash_dir / "crash.json"
                 with open(crash_file, 'w') as f:
                     json.dump(data, f)
             
@@ -54,18 +57,18 @@ class TestDirectoryCrashFetcher:
             assert len(crashes) == 2, "Should load 2 crashes"
             
             # Check first crash
-            crash_001 = next(c for c in crashes if c.crash_id == "crash_001")
-            assert crash_001.summary == "Segmentation fault in main()"
-            assert crash_001.stack_trace == "Stack trace 1"
-            assert crash_001.raw_data == {"severity": "high"}
-            assert crash_001.timestamp == 1234567890.0
+            crash_000 = next(c for c in crashes if c.crash_id == "crash_000")
+            assert crash_000.summary == "Segmentation fault in main()"
+            assert crash_000.stack_trace == "Stack trace 1"
+            assert crash_000.raw_data == {"severity": "high"}
+            assert crash_000.timestamp == 1234567890.0
             
             # Check second crash
-            crash_002 = next(c for c in crashes if c.crash_id == "crash_002")
-            assert crash_002.summary == "Null pointer dereference"
-            assert crash_002.stack_trace == "Stack trace 2"
-            assert crash_002.raw_data == {"severity": "medium"}
-            assert crash_002.timestamp == 1234567891.0
+            crash_001 = next(c for c in crashes if c.crash_id == "crash_001")
+            assert crash_001.summary == "Null pointer dereference"
+            assert crash_001.stack_trace == "Stack trace 2"
+            assert crash_001.raw_data == {"severity": "medium"}
+            assert crash_001.timestamp == 1234567891.0
     
     def test_skips_invalid_files(self):
         """Should gracefully handle bad JSON files."""

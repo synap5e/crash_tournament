@@ -49,5 +49,6 @@ disallow_untyped_defs = true
 [dependency-groups]
 dev = [
     "basedpyright>=1.31.7",
+    "ruff>=0.14.1",
     "ty>=0.0.1a23",
 ]

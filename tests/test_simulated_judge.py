@@ -34,7 +34,7 @@ class TestSimulatedJudge:
         # Assert
         assert result.ordered_ids == ["crash_a", "crash_b", "crash_c"], \
             "Should return exact ground truth order with zero noise"
-        assert result.group_size == 3
+        assert len(result.ordered_ids) == 3
         assert result.judge_id == "simulated"
     
     def test_noise_adds_variance(self):
@@ -107,7 +107,7 @@ class TestSimulatedJudge:
         from crash_tournament.models import OrdinalResult
         assert isinstance(result, OrdinalResult), "Should return OrdinalResult instance"
         assert result.judge_id == "simulated"
-        assert result.group_size == 2
+        assert len(result.ordered_ids) == 2
     
     def test_rationale_includes_scores(self):
         """Output should be informative and include score information."""
@@ -257,4 +257,4 @@ class TestSimulatedJudge:
         
         # Assert
         assert result.ordered_ids == ["crash_a"], "Should return single crash"
-        assert result.group_size == 1, "Group size should be 1"
+        assert len(result.ordered_ids) == 1, "Should have 1 ordered ID"

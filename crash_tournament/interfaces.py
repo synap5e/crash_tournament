@@ -5,8 +5,29 @@ All interfaces are synchronous to avoid asyncio complexity in core interfaces.
 """
 
 from abc import ABC, abstractmethod
-from typing import Iterable, Sequence, Optional, Any
-from .models import Crash, OrdinalResult, GradedResult
+from collections.abc import Iterable, Mapping, Sequence
+from typing import TypedDict
+from .models import Crash, OrdinalResult
+
+
+class RankerStatistics(TypedDict):
+    """TypedDict for ranker statistics."""
+    eval_counts: dict[str, int]
+    win_counts: dict[str, int]
+    rankings: dict[str, list[int]]
+    group_sizes: dict[str, list[int]]
+
+
+class RankerState(TypedDict):
+    """TypedDict for ranker snapshot state."""
+    ratings: dict[str, dict[str, float]]  # crash_id -> {"mu": float, "sigma": float}
+    statistics: RankerStatistics
+
+
+class SystemState(TypedDict):
+    """TypedDict for system snapshot state."""
+    ranker_state: RankerState
+    runtime_state: dict[str, int]  # evaluated_matchups, etc.
 
 
 class JudgeError(Exception):
@@ -29,18 +50,17 @@ class CrashFetcher(ABC):
 
 
 class Judge(ABC):
-    """Interface for evaluating crash groups."""
+    """Interface for evaluating crash matchups."""
     
     @abstractmethod
-    def evaluate_group(self, crashes: Sequence[Crash], *, grading: bool = False) -> OrdinalResult:
+    def evaluate_matchup(self, crashes: Sequence[Crash]) -> OrdinalResult:
         """
-        Synchronous evaluation of a crash group.
+        Synchronous evaluation of a crash matchup.
         
         May block. Caller runs in threadpool for concurrency.
         
         Args:
             crashes: Sequence of crashes to evaluate
-            grading: If True, return GradedResult instead of OrdinalResult
             
         Returns:
             OrdinalResult with ordered crash IDs and rationale
@@ -52,8 +72,8 @@ class Storage(ABC):
     """Interface for persisting results and state."""
     
     @abstractmethod
-    def persist_ordinal(self, res: OrdinalResult) -> None:
-        """Persist an ordinal evaluation result."""
+    def persist_matchup_result(self, res: OrdinalResult) -> None:
+        """Persist a matchup evaluation result."""
         pass
 
     @abstractmethod
@@ -62,7 +82,7 @@ class Storage(ABC):
         pass
 
     @abstractmethod
-    def save_snapshot(self, state: dict[str, Any]) -> None:
+    def save_snapshot(self, state: SystemState) -> None:
         """
         Save system state snapshot.
         
@@ -71,7 +91,7 @@ class Storage(ABC):
         pass
 
     @abstractmethod
-    def load_snapshot(self) -> Optional[dict[str, Any]]:
+    def load_snapshot(self) -> SystemState | None:
         """Load system state snapshot."""
         pass
 
@@ -99,33 +119,18 @@ class Ranker(ABC):
         pass
 
     @abstractmethod
-    def snapshot(self) -> dict[str, Any]:
+    def snapshot(self) -> RankerState:
         """Export current ranking state."""
         pass
 
     @abstractmethod
-    def load_snapshot(self, state: dict[str, Any]) -> None:
+    def load_snapshot(self, state: RankerState) -> None:
         """Load ranking state from snapshot."""
         pass
 
-    @abstractmethod
-    def track_evaluation_by_phase(self, crash_id: str, is_seed_phase: bool) -> None:
-        """Track evaluation count by phase."""
-        pass
-
     @abstractmethod  
-    def get_eval_count(self, crash_id: str) -> int:
+    def get_total_eval_count(self, crash_id: str) -> int:
         """Get total evaluation count for a crash."""
-        pass
-
-    @abstractmethod
-    def get_seed_eval_count(self, crash_id: str) -> int:
-        """Get number of times crash was evaluated in seed phase."""
-        pass
-
-    @abstractmethod
-    def get_adaptive_eval_count(self, crash_id: str) -> int:
-        """Get number of times crash was evaluated in adaptive phase."""
         pass
 
     @abstractmethod
@@ -140,18 +145,18 @@ class Ranker(ABC):
 
 
 class Selector(ABC):
-    """Interface for selecting crash groups to evaluate."""
+    """Interface for selecting crash matchups to evaluate."""
     
     @abstractmethod
-    def next_groups(self, all_crash_ids: Sequence[str], k: int, budget: int) -> Sequence[Sequence[str]]:
+    def select_matchup(self, all_crash_ids: Sequence[str], matchup_size: int) -> Sequence[str] | None:
         """
-        Return list of crash ID groups to evaluate.
+        Select crash ID matchup to evaluate.
         
         Args:
             all_crash_ids: All available crash IDs to select from
-            k: Group size
-            budget: Number of groups to return
+            matchup_size: Number of crashes per matchup
             
-        Implements uncertainty-based sampling per doc lines 186–193.
+        Returns:
+            List of crash IDs for matchup, or None if no more matchups available
         """
         pass

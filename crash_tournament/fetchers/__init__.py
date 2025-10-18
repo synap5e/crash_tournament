@@ -1,7 +1,13 @@
 """
 Crash fetcher implementations.
 
-TODO: Implement DirectoryCrashFetcher
+Provides implementations of the CrashFetcher interface for loading crash data
+from various sources.
+
+Available implementations:
+- DirectoryCrashFetcher: Loads crashes from directory structure with JSON files
 """
 
-# Placeholder for future fetcher implementations
+from .directory_fetcher import DirectoryCrashFetcher
+
+__all__ = ["DirectoryCrashFetcher"]

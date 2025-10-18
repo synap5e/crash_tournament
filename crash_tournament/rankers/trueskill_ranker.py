@@ -4,13 +4,15 @@ TrueSkill ranker implementation.
 Uses trueskill package with k-way to pairwise conversion and proper weighting.
 """
 
-import random
 import threading
-from typing import Dict, List, Optional, Any
+from typing import cast, override, TYPE_CHECKING
 
-from trueskill import Rating, rate_1vs1, setup
+if TYPE_CHECKING:
+    from loguru import Logger
 
-from ..interfaces import Ranker
+from trueskill import Rating, rate_1vs1, setup  # type: ignore[import-untyped]
+
+from ..interfaces import Ranker, RankerState
 from ..models import OrdinalResult
 from ..logging_config import get_logger
 
@@ -32,45 +34,37 @@ class TrueSkillRanker(Ranker):
             sigma: Initial standard deviation
             tau: Dynamic factor for rating updates
         """
-        self.mu = mu
-        self.sigma = sigma
-        self.tau = tau
+        self.mu: float = mu
+        self.sigma: float = sigma
+        self.tau: float = tau
         
         # Store ratings per crash
-        self.ratings: Dict[str, Rating] = {}
+        self.ratings = dict[str, Rating]()
         
         # Statistics tracking
-        self.eval_counts: Dict[str, int] = {}  # How many times each crash was evaluated
-        self.seed_eval_counts: Dict[str, int] = {}  # How many times each crash was evaluated in seed phase
-        self.adaptive_eval_counts: Dict[str, int] = {}  # How many times each crash was evaluated in adaptive phase
-        self.win_counts: Dict[str, int] = {}    # How many times each crash won
-        self.rankings: Dict[str, List[int]] = {}  # All rankings for each crash
-        self.group_sizes: Dict[str, List[int]] = {}  # Group sizes for each evaluation
+        self.eval_counts = dict[str, int]()  # How many times each crash was evaluated
+        self.win_counts = dict[str, int]()    # How many times each crash won
+        self.rankings = dict[str, list[int]]()  # All rankings for each crash
+        self.group_sizes = dict[str, list[int]]()  # Group sizes for each evaluation
         
         # Thread safety lock
-        self._lock = threading.Lock()
+        self._lock: threading.Lock = threading.Lock()
         
         # Setup logger
-        self.logger = get_logger("trueskill_ranker")
+        self.logger: Logger = get_logger("trueskill_ranker")
         
         # Configure trueskill
-        setup(mu=mu, sigma=sigma, tau=tau)
+        _ = setup(mu=mu, sigma=sigma, tau=tau)
         self.logger.info(f"TrueSkill ranker initialized: mu={mu}, sigma={sigma}, tau={tau}")
     
     def _get_or_create_rating(self, crash_id: str) -> Rating:
         """Get existing rating or create default one for unseen crash."""
         if crash_id not in self.ratings:
-            self.ratings[crash_id] = Rating(mu=self.mu, sigma=self.sigma)
+            self.ratings[crash_id] = Rating(mu=self.mu, sigma=self.sigma)  # type: ignore[arg-type]
         return self.ratings[crash_id]
     
-    def track_evaluation_by_phase(self, crash_id: str, is_seed_phase: bool) -> None:
-        """Track that a crash was evaluated in a specific phase."""
-        with self._lock:
-            if is_seed_phase:
-                self.seed_eval_counts[crash_id] = self.seed_eval_counts.get(crash_id, 0) + 1
-            else:
-                self.adaptive_eval_counts[crash_id] = self.adaptive_eval_counts.get(crash_id, 0) + 1
 
+    @override
     def update_with_ordinal(self, res: OrdinalResult, weight: float = 1.0) -> None:
         """
         Update rankings with ordinal result using k-way to pairwise conversion.
@@ -121,57 +115,57 @@ class TrueSkillRanker(Ranker):
                 # Update ratings with adjusted tau
                 # Temporarily adjust tau for this update
                 original_tau = self.tau
-                setup(mu=self.mu, sigma=self.sigma, tau=adjusted_tau)
+                _ = setup(mu=self.mu, sigma=self.sigma, tau=adjusted_tau)
                 
-                new_winner, new_loser = rate_1vs1(winner_rating, loser_rating, drawn=False)
+                new_winner, new_loser = rate_1vs1(winner_rating, loser_rating, drawn=False)  # type: ignore[misc]
                 
                 # Restore original tau
-                setup(mu=self.mu, sigma=self.sigma, tau=original_tau)
+                _ = setup(mu=self.mu, sigma=self.sigma, tau=original_tau)
                 
                 # Update stored ratings
                 self.ratings[winner_id] = new_winner
                 self.ratings[loser_id] = new_loser
                 
                 self.logger.info(f"Score update: {winner_id} vs {loser_id}")
-                self.logger.info(f"  {winner_id}: {winner_rating.mu:.2f}->{new_winner.mu:.2f} (σ: {winner_rating.sigma:.2f}->{new_winner.sigma:.2f})")
-                self.logger.info(f"  {loser_id}: {loser_rating.mu:.2f}->{new_loser.mu:.2f} (σ: {loser_rating.sigma:.2f}->{new_loser.sigma:.2f})")
+                self.logger.info(f"  {winner_id}: {winner_rating.mu:.2f}->{new_winner.mu:.2f} (σ: {winner_rating.sigma:.2f}->{new_winner.sigma:.2f})")  # type: ignore[attr-defined]
+                self.logger.info(f"  {loser_id}: {loser_rating.mu:.2f}->{new_loser.mu:.2f} (σ: {loser_rating.sigma:.2f}->{new_loser.sigma:.2f})")  # type: ignore[attr-defined]
     
+    @override
     def get_score(self, crash_id: str) -> float:
         """Get current score (mu) for a crash."""
         rating = self._get_or_create_rating(crash_id)
-        return rating.mu
+        return rating.mu  # type: ignore[attr-defined]
     
+    @override
     def get_uncertainty(self, crash_id: str) -> float:
         """Get current uncertainty (sigma) for a crash."""
         rating = self._get_or_create_rating(crash_id)
-        return rating.sigma
+        return rating.sigma  # type: ignore[attr-defined]
     
-    def snapshot(self) -> dict[str, Any]:
+    @override
+    def snapshot(self) -> RankerState:
         """Export current ranking state as serializable dict."""
         return {
             "ratings": {
                 crash_id: {
-                    "mu": rating.mu,
-                    "sigma": rating.sigma
+                    "mu": rating.mu,  # type: ignore[attr-defined]
+                    "sigma": rating.sigma  # type: ignore[attr-defined]
                 }
                 for crash_id, rating in self.ratings.items()
             },
             "statistics": {
                 "eval_counts": self.eval_counts,
-                "seed_eval_counts": self.seed_eval_counts,
-                "adaptive_eval_counts": self.adaptive_eval_counts,
                 "win_counts": self.win_counts,
                 "rankings": self.rankings,
                 "group_sizes": self.group_sizes
             }
         }
     
-    def load_snapshot(self, state: dict[str, Any]) -> None:
+    @override
+    def load_snapshot(self, state: RankerState) -> None:
         """Load ranking state from snapshot."""
         self.ratings.clear()
         self.eval_counts.clear()
-        self.seed_eval_counts.clear()
-        self.adaptive_eval_counts.clear()
         self.win_counts.clear()
         self.rankings.clear()
         self.group_sizes.clear()
@@ -181,45 +175,38 @@ class TrueSkillRanker(Ranker):
             # New format with statistics
             ratings_data = state["ratings"]
             statistics = state.get("statistics", {})
-            self.eval_counts = statistics.get("eval_counts", {})
-            self.seed_eval_counts = statistics.get("seed_eval_counts", {})
-            self.adaptive_eval_counts = statistics.get("adaptive_eval_counts", {})
-            self.win_counts = statistics.get("win_counts", {})
-            self.rankings = statistics.get("rankings", {})
-            self.group_sizes = statistics.get("group_sizes", {})
+            self.eval_counts = cast(dict[str, int], dict(statistics.get("eval_counts", {})))
+            self.win_counts = cast(dict[str, int], dict(statistics.get("win_counts", {})))
+            self.rankings = cast(dict[str, list[int]], dict(statistics.get("rankings", {})))
+            self.group_sizes = cast(dict[str, list[int]], dict(statistics.get("group_sizes", {})))
         else:
             # Old format - just ratings
             ratings_data = state
         
         for crash_id, rating_data in ratings_data.items():
+            rating_dict = rating_data  # type: ignore[assignment]
             self.ratings[crash_id] = Rating(
-                mu=rating_data["mu"],
-                sigma=rating_data["sigma"]
+                mu=rating_dict["mu"],  # type: ignore[arg-type]
+                sigma=rating_dict["sigma"]  # type: ignore[arg-type]
             )
     
-    def get_all_scores(self) -> Dict[str, float]:
+    def get_all_scores(self) -> dict[str, float]:
         """Get all crash scores for debugging."""
-        return {crash_id: rating.mu for crash_id, rating in self.ratings.items()}
+        return {crash_id: rating.mu for crash_id, rating in self.ratings.items()}  # type: ignore[attr-defined]
     
-    def get_all_uncertainties(self) -> Dict[str, float]:
+    def get_all_uncertainties(self) -> dict[str, float]:
         """Get all crash uncertainties for debugging."""
-        return {crash_id: rating.sigma for crash_id, rating in self.ratings.items()}
+        return {crash_id: rating.sigma for crash_id, rating in self.ratings.items()}  # type: ignore[attr-defined]
     
-    def get_eval_count(self, crash_id: str) -> int:
-        """Get evaluation count for a crash."""
+    @override
+    def get_total_eval_count(self, crash_id: str) -> int:
+        """Get total evaluation count for a crash."""
         return self.eval_counts.get(crash_id, 0)
     
-    def get_seed_eval_count(self, crash_id: str) -> int:
-        """Get number of times crash was evaluated in seed phase."""
-        return self.seed_eval_counts.get(crash_id, 0)
-    
-    def get_adaptive_eval_count(self, crash_id: str) -> int:
-        """Get number of times crash was evaluated in adaptive phase."""
-        return self.adaptive_eval_counts.get(crash_id, 0)
-    
+    @override
     def get_win_percentage(self, crash_id: str) -> float:
         """Get win percentage for a crash."""
-        eval_count = self.get_eval_count(crash_id)
+        eval_count = self.get_total_eval_count(crash_id)
         if eval_count == 0:
             return 0.0
         win_count = self.win_counts.get(crash_id, 0)
@@ -234,6 +221,7 @@ class TrueSkillRanker(Ranker):
             return 0.0
         return (win_count / total_possible_wins) * 100.0
     
+    @override
     def get_average_ranking(self, crash_id: str) -> float:
         """Get average ranking for a crash."""
         rankings = self.rankings.get(crash_id, [])
@@ -241,13 +229,13 @@ class TrueSkillRanker(Ranker):
             return 0.0
         return sum(rankings) / len(rankings)
     
-    def get_all_statistics(self) -> Dict[str, Dict[str, float]]:
+    def get_all_statistics(self) -> dict[str, dict[str, float]]:
         """Get all statistics for all crashes."""
         stats = {}
         for crash_id in self.ratings.keys():
             stats[crash_id] = {
                 'score': self.get_score(crash_id),
-                'eval_count': self.get_eval_count(crash_id),
+                'eval_count': self.get_total_eval_count(crash_id),
                 'win_percentage': self.get_win_percentage(crash_id),
                 'avg_ranking': self.get_average_ranking(crash_id)
             }

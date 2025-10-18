@@ -1,11 +1,11 @@
 """
 Core dataclasses for the crash tournament system.
 
-Defines Crash, OrdinalResult, and GradedResult models with validation.
+Defines Crash and OrdinalResult models with validation.
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any
+from typing import Any
 import time
 
 
@@ -29,35 +29,15 @@ class Crash:
 class OrdinalResult:
     """Result of ordinal ranking evaluation."""
     
-    ordered_ids: List[str]
+    ordered_ids: list[str]
     raw_output: str
     parsed_result: dict[str, Any]
     timestamp: float = field(default_factory=time.time)
     judge_id: str = "unknown"
-    group_size: int = 0
     
     def __post_init__(self):
         """Validate ordinal result data."""
         if not self.ordered_ids:
             raise ValueError("ordered_ids cannot be empty")
-        if len(self.ordered_ids) != self.group_size:
-            raise ValueError(f"ordered_ids length {len(self.ordered_ids)} != group_size {self.group_size}")
 
 
-@dataclass
-class GradedResult:
-    """Result of graded evaluation (for future use)."""
-    
-    grades: Dict[str, float]
-    raw_output: str
-    parsed_result: dict[str, Any]
-    timestamp: float = field(default_factory=time.time)
-    judge_id: str = "unknown"
-    group_size: int = 0
-    
-    def __post_init__(self):
-        """Validate graded result data."""
-        if not self.grades:
-            raise ValueError("grades cannot be empty")
-        if len(self.grades) != self.group_size:
-            raise ValueError(f"grades length {len(self.grades)} != group_size {self.group_size}")

@@ -9,10 +9,9 @@ Usage:
 """
 
 import argparse
-import json
-import subprocess
 import sys
 from pathlib import Path
+from typing import cast
 
 from crash_tournament.models import Crash
 from crash_tournament.judges.cursor_agent_judge import CursorAgentJudge
@@ -50,7 +49,7 @@ def create_judge(judge_type: str, timeout: float = 500.0, prompt_file: str | Non
         return CursorAgentStreamingJudge(timeout=timeout, prompt_file=prompt_file)
     elif judge_type == "simulated":
         # Create simple ground truth based on file order
-        ground_truth = {}
+        ground_truth = dict[str, float]()
         return SimulatedJudge(ground_truth, noise=0.1)
     elif judge_type == "dummy":
         return DummyJudge(mode="deterministic")
@@ -79,38 +78,38 @@ Examples:
         """
     )
     
-    parser.add_argument(
+    _ = parser.add_argument(
         "--judge",
         choices=["cursor_agent", "cursor_agent_streaming", "simulated", "dummy"],
         required=True,
         help="Type of judge to use"
     )
     
-    parser.add_argument(
+    _ = parser.add_argument(
         "--timeout",
         type=float,
         default=300.0,
         help="Timeout for judge in seconds (default: 300)"
     )
     
-    parser.add_argument(
+    _ = parser.add_argument(
         "-p", "--prompt",
         help="Custom prompt file path (overrides default prompt)"
     )
     
-    parser.add_argument(
+    _ = parser.add_argument(
         "crash_files",
         nargs="+",
         help="Paths to crash JSON files"
     )
     
-    parser.add_argument(
+    _ = parser.add_argument(
         "--debug",
         action="store_true",
         help="Enable debug logging"
     )
     
-    parser.add_argument(
+    _ = parser.add_argument(
         "--log-level",
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         default="INFO",
@@ -118,15 +117,23 @@ Examples:
     )
     
     
-    args = parser.parse_args()
+    args: argparse.Namespace = parser.parse_args()
+    
+    # Type the argparse attributes for better type checking
+    crash_files: list[str] = cast(list[str], args.crash_files)
+    judge_type: str = cast(str, args.judge)
+    timeout: float = cast(float, args.timeout)
+    prompt: str | None = cast(str | None, args.prompt)
+    debug: bool = cast(bool, args.debug)
+    log_level: str = cast(str, args.log_level)
     
     # Validate arguments
     
-    if len(args.crash_files) < 2:
+    if len(crash_files) < 2:
         parser.error("At least 2 crash files are required for ranking")
     
     # Setup logging
-    setup_logging(level=args.log_level, debug=args.debug)
+    setup_logging(level=log_level, debug=debug)
     logger = get_logger("rank_crashes_demo")
     
     try:
@@ -134,10 +141,10 @@ Examples:
         logger.info("Starting crash ranking demo")
         
         # Create crash objects from file paths
-        print(f"Creating {len(args.crash_files)} crash objects...")
-        logger.info(f"Creating {len(args.crash_files)} crash objects from file paths")
-        crashes = []
-        for filepath in args.crash_files:
+        print(f"Creating {len(crash_files)} crash objects...")
+        logger.info(f"Creating {len(crash_files)} crash objects from file paths")
+        crashes = list[Crash]()
+        for filepath in crash_files:
             crash = create_crash_from_path(filepath)
             crashes.append(crash)
             logger.info(f"Created crash: {crash.crash_id}")
@@ -146,24 +153,24 @@ Examples:
         print()
         
         # Create judge
-        print(f"Creating {args.judge} judge...")
-        logger.info(f"Creating {args.judge} judge with timeout {args.timeout}")
-        if args.judge == "dummy":
+        print(f"Creating {judge_type} judge...")
+        logger.info(f"Creating {judge_type} judge with timeout {timeout}")
+        if judge_type == "dummy":
             judge = DummyJudge(mode="deterministic")
-        elif args.judge == "simulated":
+        elif judge_type == "simulated":
             # Create ground truth from file order
-            ground_truth = {crash.crash_id: float(i) for i, crash in enumerate(crashes)}
+            ground_truth: dict[str, float] = {crash.crash_id: float(i) for i, crash in enumerate(crashes)}
             judge = SimulatedJudge(ground_truth, noise=0.1)
         else:
-            judge = create_judge(args.judge, timeout=args.timeout, prompt_file=args.prompt)
+            judge = create_judge(judge_type, timeout=timeout, prompt_file=prompt)
         
         # Test connection for cursor-agent
-        if args.judge in ["cursor_agent", "cursor_agent_streaming"]:
+        if judge_type in ["cursor_agent", "cursor_agent_streaming"]:
             print("Testing cursor-agent connection...")
             logger.info("Testing cursor-agent connection")
             if hasattr(judge, 'test_connection'):
                 test_method = getattr(judge, 'test_connection')
-                test_method()
+                test_method()  # type: ignore[no-untyped-call, no-any-return]
                 logger.info("Cursor-agent connection successful")
                 print("  ✓ Connection successful")
             else:
@@ -175,7 +182,7 @@ Examples:
         # Rank crashes
         print(f"Ranking {len(crashes)} crashes...")
         logger.info(f"Starting evaluation of {len(crashes)} crashes")
-        result = judge.evaluate_group(crashes)
+        result = judge.evaluate_matchup(crashes)
         logger.info(f"Evaluation completed: {result.ordered_ids}")
         
         print()
@@ -187,7 +194,7 @@ Examples:
         # Display rankings
         for rank, crash_id in enumerate(result.ordered_ids, 1):
             # Find the crash details
-            crash = next(c for c in crashes if c.crash_id == crash_id)
+            crash: Crash = next(c for c in crashes if c.crash_id == crash_id)
             print(f"{rank}. {crash_id}")
             print(f"   File: {crash.file_path}")
             print()

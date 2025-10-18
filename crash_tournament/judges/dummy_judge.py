@@ -5,7 +5,8 @@ Provides deterministic and random ranking for testing purposes.
 """
 
 import random
-from typing import Dict, List, Sequence
+from collections.abc import Sequence
+from typing import override
 
 from ..interfaces import Judge
 from ..models import Crash, OrdinalResult
@@ -33,7 +34,8 @@ class DummyJudge(Judge):
         if mode == "random":
             random.seed(seed)
     
-    def evaluate_group(self, crashes: Sequence[Crash], *, grading: bool = False) -> OrdinalResult:
+    @override
+    def evaluate_matchup(self, crashes: Sequence[Crash]) -> OrdinalResult:
         """
         Evaluate group of crashes using dummy logic.
         
@@ -67,7 +69,6 @@ class DummyJudge(Judge):
             raw_output=f"Dummy judge output for {len(crashes)} crashes",
             parsed_result={"rationale": rationale},
             judge_id=self.judge_id,
-            group_size=len(crashes),
         )
     
     def test_connection(self) -> bool:

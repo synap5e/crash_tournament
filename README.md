@@ -1,18 +1,18 @@
 # Crash Tournament
 
-A TrueSkill-based ranking system for crash reports using adaptive comparative judging. Ranks crashes by exploitability with minimal LLM calls through uncertainty-based active sampling.
+A TrueSkill-based ranking system for crash reports using comparative judging. Ranks crashes by exploitability with minimal LLM calls through comparative judging.
 
 ## Purpose
 
-This system ranks large sets of crash reports (hundreds to thousands) by likely exploitability. Instead of evaluating each crash individually, it compares small groups of crashes (typically 4 at a time) to build a global ranking using the TrueSkill algorithm. The system performs k-way comparisons but converts them to pairwise TrueSkill updates, trading theoretical rigor for efficiency by assuming transitivity and consistent judge accuracy. By focusing comparisons on crashes with high uncertainty, it minimizes the number of LLM calls needed to achieve confident rankings.
+This system ranks large sets of crash reports (hundreds to thousands) by likely exploitability. Instead of evaluating each crash individually, it compares small groups of crashes (typically 4 at a time) to build a global ranking using the TrueSkill algorithm. The system performs k-way comparisons but converts them to pairwise TrueSkill updates, trading theoretical rigor for efficiency by assuming transitivity and consistent judge accuracy.
 
 ## Approach
 
-We use TrueSkill for ranking, but with an important adaptation: while TrueSkill is designed for pairwise comparisons, we perform k-way ordinal comparisons (typically 4 crashes at a time) and convert them to sequential pairwise TrueSkill updates. A configurable Judge (typically an LLM-based agent like `cursor-agent`) ranks small groups of crashes, and these ordinal results are decomposed into k-1 pairwise comparisons that update TrueSkill ratings (mu/sigma per crash). An UncertaintySelector uses probabilistic sampling to choose which groups to evaluate next, converting uncertainty (sigma) values into a probability distribution with configurable temperature, ensuring informative comparisons while maintaining exploration diversity. 
+We use TrueSkill for ranking, but with an important adaptation: while TrueSkill is designed for pairwise comparisons, we perform k-way ordinal comparisons (typically 4 crashes at a time) and convert them to sequential pairwise TrueSkill updates. A configurable Judge (typically an LLM-based agent like `cursor-agent`) ranks small groups of crashes, and these ordinal results are decomposed into k-1 pairwise comparisons that update TrueSkill ratings (mu/sigma per crash). 
 
-k-way judging: Instead of evaluating crashes strictly pairwise, we present a group of k crashes to the judge and rank them all at once. To update TrueSkill, we naively convert the k-way ranking into k-1 sequential pairwise updates. This sacrifices some theoretical rigor, because converting a k-way ranking into sequential pairwise updates treats correlated outcomes as independent, which can introduce noise and reduce the probabilistic fidelity of the TrueSkill updates.
+**k-way judging**: Instead of evaluating crashes strictly pairwise, we present a group of k crashes to the judge and rank them all at once. To update TrueSkill, we naively convert the k-way ranking into k-1 sequential pairwise updates. This sacrifices some theoretical rigor (converting a k-way ranking into sequential pairwise updates treats correlated outcomes as independent), which can introduce noise and reduce the probabilistic fidelity of the TrueSkill updates.
 
-The efficiency gain comes from an information-per-call tradeoff: one k-way evaluation produces multiple pairwise updates simultaneously. While each derived pairwise update carries (hopefully only) slightly less reliable information than an independent 2-way call, the total information gained per LLM call can (again, hopefully) exceed that of multiple individual pairwise evaluations. Standard TrueSkill treats each pairwise evaluation as the cost unit. In our setting, the expensive resource is the LLM call; k-way judging reduces the number of costly calls while still providing pairwise-equivalent updates for TrueSkill to converge. Even if convergence requires more pairwise updates (due to lower quality pairwise judmgenets to k=2), it should require fewer LLM calls.
+The efficiency gain comes from an information-per-call tradeoff: one k-way evaluation produces multiple pairwise updates simultaneously. While each derived pairwise update carries (hopefully only slightly) less reliable information than an independent 2-way call, the total information gained per LLM call may exceed that of an individual pairwise evaluation. Standard TrueSkill treats each pairwise evaluation as the cost unit. In our setting, the expensive resource is the LLM call; k-way judging reduces the number of costly calls while still providing pairwise-equivalent updates for TrueSkill to converge. Even if convergence requires more pairwise updates (due to lower quality pairwise judmgenets to k=2), it should require fewer LLM calls.
 
 For k=2, this reduces to standard TrueSkill with a single pairwise comparison per evaluation.
 
@@ -48,15 +48,7 @@ Run a complete tournament with the orchestrator:
 uv run python -m crash_tournament \
     --crashes-dir ./crashes \
     --output-dir ./output \
-    --judge-type cursor-agent \
-    --seed-groups 20
-
-# Stop when uncertainty drops below 0.1
-uv run python -m crash_tournament \
-    --crashes-dir ./crashes \
-    --output-dir ./output \
-    --judge-type cursor-agent \
-    --uncertainty-threshold 0.1
+    --judge-type cursor-agent
 
 # Use custom pattern for different file types
 uv run python -m crash_tournament \
@@ -65,18 +57,18 @@ uv run python -m crash_tournament \
     --output-dir ./output \
     --judge-type simulated
 
-# Use different temperature values for sampling behavior
+# Use different worker counts for parallel execution
 uv run python -m crash_tournament \
     --crashes-dir ./crashes \
     --output-dir ./output \
     --judge-type cursor-agent \
-    --temperature 0.5  # More greedy (focuses on highest uncertainty)
+    --workers 4  # Parallel execution with 4 workers
 
 uv run python -m crash_tournament \
     --crashes-dir ./crashes \
     --output-dir ./output \
     --judge-type cursor-agent \
-    --temperature 2.0  # More diverse (explores more crashes)
+    --workers 1  # Sequential execution (default)
 ```
 
 ### Options
@@ -85,29 +77,28 @@ uv run python -m crash_tournament \
 - `--crashes-pattern`: Pattern for finding crash files (default: `*.json`)
 - `--output-dir`: Directory for JSONL/snapshots output (required)
 - `--judge-type`: Judge type (`simulated`, `dummy`, `cursor-agent`, `cursor-agent-streaming`)
-- `--k`: Group size for comparisons (default: 4)
-- `--budget`: Total number of group evaluations (default: auto-computed)
-- `--seed-groups`: Initial random groups for coverage (default: 200)
-- `--groups-per-round`: Groups per uncertainty round (default: 50)
+- `--matchup-size`: Number of crashes per matchup (default: 4)
+- `--budget`: Total number of matchup evaluations (default: matchup_size * 250)
+- `--snapshot-every`: Save snapshot every N matchups (default: 10)
 - `--workers`: Number of worker threads (default: 1)
-- `--resume`: Load snapshot and continue from previous run
-- `--uncertainty-threshold`: Stop tournament when average uncertainty drops below this threshold (default: run until budget exhausted)
-- `--temperature`: Temperature for probabilistic uncertainty sampling (default: 1.0, lower=more greedy, higher=more diverse)
 - `--debug`: Enable debug logging
 
 ## Architecture
 
 The system uses dependency injection to wire together swappable components:
 
+**Note:** The system automatically loads snapshots if they exist, so no manual `--resume` flag is needed.
+
 ### Core Interfaces
 
 `CrashFetcher` — Abstract interface for crash data sources (not limited to files)
 - `list_crashes() -> Iterable[Crash]`: Returns all crashes
 - `get_crash(crash_id) -> Crash`: Fetch specific crash
-- Implementation: `DirectoryCrashFetcher` (scans directory for crash files)
+- Implementations:
+  - `DirectoryCrashFetcher`: Scans directory for crash files, extracts crash_id from parent directory name
 
 `Judge` — Compares a group of crashes and returns ranked order
-- `evaluate_group(crashes: Sequence[Crash], *, grading: bool = False) -> OrdinalResult`: Returns ordered crash IDs
+- `evaluate_matchup(crashes: Sequence[Crash]) -> OrdinalResult`: Returns ordered crash IDs
 - Implementations:
   - `CursorAgentJudge`: Wraps `cursor-agent` CLI (blocking, single JSON response)
     - Expected JSON schema: `{"ranked_ids": ["crash_1", "crash_2", ...], "rationale": "...", ...}`
@@ -117,127 +108,102 @@ The system uses dependency injection to wire together swappable components:
   - `DummyJudge`: Deterministic/random responses for testing
 
 `Storage` — Persists observations and system snapshots
-- `persist_ordinal(res: OrdinalResult)`: Append observation
+- `persist_matchup_result(res: OrdinalResult)`: Append observation
 - `load_observations() -> Iterable[OrdinalResult]`: Load all observations
 - `save_snapshot(state: dict)`: Save system state (idempotent)
 - `load_snapshot() -> Optional[dict]`: Restore state
-- Implementation: `JSONLStorage` (JSONL for observations, JSON for snapshots)
+- Implementations:
+  - `JSONLStorage`: JSONL for observations, JSON for snapshots
 - Reproducibility: Each observation includes `timestamp` and `raw_output`; no deduplication (groups may be re-evaluated)
 
-`Ranker` — Maintains TrueSkill ratings for all crashes
+`Ranker` — Maintains TrueSkill ratings and statistics
 - `update_with_ordinal(res: OrdinalResult, weight: float)`: Update ratings from comparison
 - `get_score(crash_id) -> float`: Get mu (skill estimate)
 - `get_uncertainty(crash_id) -> float`: Get sigma (uncertainty)
+- `get_total_eval_count(crash_id) -> int`: Total evaluation count
+- `get_win_percentage(crash_id) -> float`: Win rate across all matches
+- `get_average_ranking(crash_id) -> float`: Average position in evaluated groups
 - `snapshot() -> dict` / `load_snapshot(state: dict)`: Serialize/deserialize state
 - Implementation: `TrueSkillRanker` (k-way → k-1 pairwise conversions, configurable weight parameter, default 1/(k-1))
 
 
 `Selector` — Decides which crash groups to evaluate next
-- `next_groups(all_crash_ids: Sequence[str], k: int, budget: int) -> Sequence[Sequence[str]]`: Generate groups
-- Implementation: `UncertaintySelector` (probabilistically samples high-sigma crashes, fills groups with nearby-mu crashes)
+- `select_matchup(all_crash_ids: Sequence[str], matchup_size: int) -> Sequence[str] | None`: Generate single matchup
+- Current implementation: `RandomSelector` (random matchup selection)
 
 `Orchestrator` — Main control loop
 - Wires all components via dependency injection
-- Runs seed phase (random groups for initial coverage)
-- Executes uncertainty rounds (adaptive sampling loop)
+- Generates matchups continuously
 - Manages thread pool for concurrent judge calls
-- Uses random group generation during seed phase, then switches to UncertaintySelector for adaptive phase
-- Thread safety: Ranker updates and Storage writes are serialized; only Judge.evaluate_group calls run in parallel
+- Thread safety: Ranker updates and Storage writes are serialized; only Judge.evaluate_matchup calls run in parallel
 - Handles snapshotting and restart logic
 - Enforces budget and stopping conditions
 
 ### Data Flow
 
 ```
-CrashFetcher → Orchestrator → Selector → Judge → Storage
-                     ↓                       ↓
-                  Ranker ←──────────── persisted observations
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   CrashFetcher  │───▶│   Orchestrator  │───▶│    Selector     │
+│                 │    │                 │    │                 │
+│ • DirectoryScan │    │ • Main Loop     │    │ • RandomSelect  │
+│ • Load Crashes  │    │ • Thread Pool   │    │ • Future:       │
+│                 │    │ • Budget Mgmt   │    │   Uncertainty   │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+                                │                       │
+                                ▼                       ▼
+                       ┌─────────────────┐    ┌─────────────────┐
+                       │     Ranker      │◀───│     Storage     │
+                       │                 │    │                 │
+                       │ • TrueSkill     │    │ • JSONL Obs     │
+                       │ • k-way→pairwise│    │ • JSON Snapshots│
+                       │ • μ/σ tracking  │    │ • Resume State  │
+                       └─────────────────┘    └─────────────────┘
+                                ▲                       ▲
+                                │                       │
+                       ┌─────────────────┐              │
+                       │      Judge      │──────────────┘
+                       │                 │
+                       │ • cursor-agent  │
+                       │ • Simulated     │
+                       │ • Streaming     │
+                       └─────────────────┘
 ```
 
-1. Orchestrator gets crash IDs from CrashFetcher
-2. Selector uses Ranker uncertainty (sigma) to probabilistically sample groups
-3. Orchestrator calls Judge (in thread pool) to rank each group
-4. Judge results persisted via Storage and fed to Ranker
-5. Ranker updates TrueSkill ratings (mu/sigma)
+**Flow:**
+1. **Orchestrator** gets crash IDs from **CrashFetcher**
+2. **Selector** generates matchups (currently random, future: uncertainty-based)
+3. **Orchestrator** calls **Judge** (in thread pool) to rank each group
+4. **Judge** results persisted via **Storage** and fed to **Ranker**
+5. **Ranker** updates TrueSkill ratings (μ/σ) using k-way→pairwise conversion
 6. Repeat until budget exhausted or convergence
+7. **Storage** enables snapshot/resume functionality
 
-## Seeding and Adaptive Phases
+## Selection Strategy
 
-The tournament uses a two-phase approach to bootstrap TrueSkill efficiently:
+Matchups are generated continuously until budget exhausted. (Current implementation: RandomSelector)
 
-### Seed Phase
+### In-Flight Crash Tracking
 
-Initial random comparisons establish baseline TrueSkill structure. Without seeding, all crashes start with identical uncertainty (σ), making adaptive selection initially no better than random.
+The orchestrator prevents the same crash from being evaluated in multiple concurrent matchups. Before generating a new matchup, crashes currently being judged are filtered out of the available pool. This ensures:
 
-- Config: `seed_groups` parameter (default: 200)
-- Behavior: Generates random k-sized groups, evaluates via judge, updates TrueSkill
-- Coverage: With 1000 crashes, k=4, seed_groups=200 → each crash appears ~0.8 times
-- Result: σ and μ values diverge, enabling meaningful uncertainty-based selection
+- No crash appears in multiple simultaneous evaluations
+- Future uncertainty-based selectors won't repeatedly select the same high-uncertainty crash across parallel workers
+- Each evaluation's results can update the crash's rating before it's selected again
 
-### Adaptive Phase
+This design trades some parallelism (workers may idle when few crashes are available) for more efficient information gathering from each evaluation.
 
-After seeding, UncertaintySelector focuses evaluations on high-uncertainty crashes to efficiently resolve ranking ambiguity.
+## Orchestrator Control Flow
 
-- Selector: Uses ranker to find crashes with high σ
-- Grouping: Pairs uncertain crashes with nearby-μ crashes for informative comparisons
-- Iteration: Continues until budget exhausted or convergence
-- Snapshots: Written after each round for idempotency
-
-Flow: Seed (random) → Update TrueSkill → Adaptive (uncertainty-based) → Update TrueSkill → Repeat
-
-Orchestrator control flow: The orchestrator considers seeding complete after evaluating exactly `seed_groups` random groups (CLI arg `--seed-groups`, default 200). It then switches to uncertainty-based selection, running adaptive rounds until `evaluated_groups >= budget` (CLI arg `--budget`). On resume from snapshot, if `evaluated_groups < seed_groups`, seeding continues; otherwise adaptive phase begins.
+The orchestrator submits matchups to worker threads incrementally as workers become available, processing results as they complete. Runs until budget exhausted.
 
 Key CLI arguments:
-- `--seed-groups`: Random groups in seed phase (default: 200)
-- `--budget`: Total evaluations across seed + adaptive phases (default: auto-computed)
-- `--groups-per-round`: Groups per adaptive round (default: 50)
-- `--k`: Crashes per group (default: 4, minimum 2)
+- `--budget`: Total evaluations (default: auto-computed)
+- `--snapshot-every`: Save snapshot every N matchups (default: 10)
+- `--matchup-size`: Crashes per matchup (default: 4, minimum 2)
 - `--workers`: Number of worker threads (default: 1)
 - `--judge-type`: Judge implementation (default: simulated)
-- `--temperature`: Temperature for probabilistic uncertainty sampling (default: 1.0)
-- `--resume`: Load snapshot and continue from previous run
 
 Note: If fewer crashes are available than `k`, the system uses all available crashes (effectively reducing group size). For meaningful tournaments, ensure you have significantly more crashes than `k`.
-
-## UncertaintySelector Algorithm
-
-Adaptive sampling algorithm that minimizes evaluations while maximizing information gain through probabilistic uncertainty sampling.
-
-Parameters:
-- `K_uncertain`: Number of uncertain crashes to sample (default: 5*k)
-- `delta_mu`: Max μ difference for "nearby" crashes (default: 1.0)
-- `max_evals_per_crash`: Optional evaluation limit per crash
-- `temperature`: Controls exploration vs exploitation (default: 1.0)
-
-Probabilistic Sampling:
-Instead of greedily selecting the top-K highest uncertainty crashes, the selector uses temperature-controlled power-based normalization to convert uncertainty (σ) values into a probability distribution:
-
-```
-p_i = (σ_i + ε)^(1/T) / Σ_j (σ_j + ε)^(1/T)
-```
-
-Where T is the temperature parameter and ε is a small constant (1e-10) for numerical stability:
-- T < 1.0: More greedy, heavily favors high-σ crashes
-- T = 1.0: Proportional to σ values (balanced exploration/exploitation)
-- T > 1.0: More diverse, flattens distribution to increase exploration
-- T = 0: Pure greedy selection (highest σ always selected)
-
-Per-round algorithm:
-1. Query ranker for all σ values from all crashes
-2. Sample K_uncertain crashes probabilistically using temperature-scaled softmax
-3. For each group: select one sampled crash as target, find crashes with |μ - target_μ| ≤ delta_mu, fill group with k-1 nearby crashes
-4. If insufficient nearby crashes, fill with random available crashes
-5. Track groups as normalized tuples to avoid duplicates (retry up to 3 times)
-6. Update eval_counts to respect max_evals_per_crash
-
-Benefits of Probabilistic Sampling:
-- Prevents over-focusing: Avoids repeatedly selecting the same high-σ crashes
-- Robust to outliers: Reduces impact of artificially inflated σ values
-- Maintains uncertainty focus: Still prioritizes high-uncertainty crashes while allowing diversity
-- Configurable exploration: Temperature parameter allows tuning the exploration/exploitation balance
-- Reduces stagnation: Prevents local "hot spots" of evaluation
-
-Rationale: Probabilistic sampling of uncertain crashes combined with nearby-μ grouping efficiently resolves ranking ambiguity while maintaining exploration diversity.
 
 ### Key Design Decisions
 
@@ -254,17 +220,17 @@ The orchestrator uses `ThreadPoolExecutor` to parallelize judge evaluations whil
 ### Threading Model
 
 What runs in parallel:
-- Judge evaluations (`judge.evaluate_group()`) run concurrently in worker threads
+- Judge evaluations (`judge.evaluate_matchup()`) run concurrently in worker threads
 - Each worker handles one group at a time, reading crash files and invoking the judge
 - With judges taking 1+ minutes per evaluation, workers do the heavy lifting
 
 What runs sequentially:
 - Result processing (storage writes, ranker updates) happens in the main thread
 - Failure tracking and abort checks run serially after each evaluation completes
-- Snapshots are saved between rounds, never during parallel execution
+- Snapshots are saved periodically, never during parallel execution
 
 How it works:
-1. Main thread submits all groups in a round to the thread pool
+1. Main thread submits matchups incrementally to the thread pool
 2. Workers execute judge calls concurrently (1+ minute each)
 3. Main thread blocks waiting for next result using `as_completed()` 
 4. When a worker finishes, main thread wakes up, processes that result (~milliseconds)
@@ -297,7 +263,7 @@ Normal completion: All work finishes, snapshot saved with final state
 
 Abort (threshold exceeded): Tournament stops immediately, thread pool shuts down, last snapshot reflects pre-abort state
 
-Ctrl-C: `KeyboardInterrupt` triggers clean shutdown, snapshot reflects last completed round
+Ctrl-C: `KeyboardInterrupt` triggers clean shutdown, snapshot reflects last completed matchups
 
 ### Configuration
 
@@ -306,7 +272,7 @@ Set `--workers` based on your judge type: use 1 for sequential execution (defaul
 ## Data Models
 
 `Crash` — Black-box crash representation
-- `crash_id: str` — Unique identifier
+- `crash_id: str` — Unique identifier (current fetcher extracts from parent directory name)
 - `file_path: str` — Path to crash file (judge reads this)
 - `timestamp: float` — Creation time
 
@@ -316,11 +282,6 @@ Set `--workers` based on your judge type: use 1 for sequential execution (defaul
 - `parsed_result: dict` — Structured data from judge
 - `timestamp: float` — Evaluation time
 - `judge_id: str` — Judge identifier
-- `group_size: int` — Number of crashes evaluated
-
-`GradedResult` — Future graded evaluation support
-- `grades: Dict[str, float]` — Crash ID → numeric score
-- `raw_output: str`, `parsed_result: dict`, `timestamp: float`, `judge_id: str`, `group_size: int`
 
 ## Directory Structure
 
@@ -328,9 +289,9 @@ Set `--workers` based on your judge type: use 1 for sequential execution (defaul
 crash_tournament/
 ├── crash_tournament/
 │   ├── __main__.py              # CLI entry point for full tournament
-│   ├── models.py                # Data models: Crash, OrdinalResult, GradedResult
+│   ├── models.py                # Data models: Crash, OrdinalResult
 │   ├── interfaces.py            # Abstract base classes for all components
-│   ├── orchestrator.py          # Main control loop (seed + adaptive phases)
+│   ├── orchestrator.py          # Main control loop
 │   ├── rank_crashes_demo.py    # Simple demo script for quick testing
 │   ├── fetchers/
 │   │   └── directory_fetcher.py # Scans directory for crash files
@@ -341,7 +302,7 @@ crash_tournament/
 │   ├── rankers/
 │   │   └── trueskill_ranker.py  # TrueSkill with k-way→pairwise conversion
 │   ├── group_selectors/
-│   │   └── uncertainty_selector.py # Uncertainty-based adaptive sampling
+│   │   └── random_selector.py # Random matchup selection
 │   ├── storage/
 │   │   └── jsonl_storage.py     # JSONL observations + JSON snapshots
 │   └── prompts/
@@ -357,14 +318,14 @@ uv run python -m pytest tests/ -v
 
 # Run specific test suites
 uv run python -m pytest tests/test_trueskill_ranker.py -v
-uv run python -m pytest tests/test_uncertainty_selector.py -v
+uv run python -m pytest tests/test_random_selector.py -v
 uv run python -m pytest tests/test_integration.py -v
 ```
 
 Test coverage:
-- ✓ Unit tests: TrueSkill ranker, uncertainty selector, JSONL storage
-- ✓ Integration tests: End-to-end tournament, uncertainty selector integration
-- ✗ Missing: Seed→adaptive transition, snapshot resume mid-tournament, orchestrator config validation
+- ✓ Unit tests: TrueSkill ranker, random selector, JSONL storage
+- ✓ Integration tests: End-to-end tournament, snapshot resume
+- ✗ Missing: Orchestrator unit tests (placeholder file only)
 
 ## Ranked Directory and Symlinks
 
@@ -372,7 +333,6 @@ The system creates a `ranked/` directory in the output folder containing symboli
 
 When created:
 - At tournament completion: Final ranked directory created with all crashes
-- At milestones: Directory recreated every 50 evaluations during long tournaments
 - On resume: Directory recreated when resuming from snapshots
 
 Symlink format:
@@ -403,45 +363,28 @@ Directory lifecycle:
 - Contains absolute symlinks to original crash files
 - Preserves original file structure and naming
 
-## Snapshot Format and Idempotency
+## Snapshot and Resume
 
-Snapshots enable flexible resume scenarios without re-evaluating completed groups.
-
-Schema (`snapshot.json`):
-```json
-{
-  "ranker_state": {
-    "crash_001": {"mu": 28.5, "sigma": 6.2},
-    "crash_002": {"mu": 22.1, "sigma": 7.8}
-  },
-  "runtime_state": {
-    "evaluated_groups": 150,
-    "current_round": 5
-  }
-}
-```
+Snapshots enable flexible resume scenarios without re-evaluating completed groups. The system automatically loads snapshots on startup and continues from where it left off.
 
 Resume scenarios:
-- **Ctrl-C interruption:** Resume from last completed round
+- **Ctrl-C interruption:** Resume from last completed matchups
 - **System failure:** Resume from last snapshot
 - **Budget extension:** Continue with larger budget after previous completion
 - **Parameter changes:** Resume with different judge/workers while preserving rankings
   - ⚠️ Warning: Changing judge type or parameters mid-tournament destabilizes TrueSkill ratings and may produce inconsistent rankings
 
-Resume behavior:
-1. Load snapshot and observations on start
-2. Restore all TrueSkill μ/σ values and evaluation counts
-3. Continue from current state with new budget/parameters
-4. Already-evaluated groups never re-evaluated
-
 Idempotency: Identical final rankings whether run continuously or after restart (for deterministic judges).
-
-Note: Snapshots written after each uncertainty round (all groups in that round). Mid-round interruption loses only that round's work.
 
 ## Error Handling and Limitations
 
 Judge Error Tolerance:
-The orchestrator tolerates up to 20% judge failures but aborts if 100% of the first 4 calls fail (judge broken) or if failure rate exceeds 20% after 50+ calls (systematic issues). This applies to all judge types (LLM-based, simulated, dummy, etc.).
+The orchestrator tolerates judge failures with specific abort thresholds:
+- **Early abort**: 100% of first 4 evaluations fail → judge is broken, abort immediately
+- **Late abort**: >20% failure rate after 50+ evaluations → systematic issues, abort
+- **Tolerance**: <20% failure rate is acceptable and tournament continues
+
+This applies to all judge types (LLM-based, simulated, dummy, etc.).
 
 ## Dependencies
 
@@ -452,18 +395,20 @@ The orchestrator tolerates up to 20% judge failures but aborts if 100% of the fi
 uv sync  # Install all dependencies
 ```
 
-## Future Research Directions
+## Future Research Directions (Not Yet Implemented)
 
 ### Grouping Strategy Optimization
 
-The current system uses **uncertainty-based selection** with **random grouping** for the adaptive phase. This is a research-backed approach, but there are several areas for potential improvement:
+The current system uses **random selection** for matchup generation. This provides a solid baseline, but there are several areas for potential improvement:
 
 #### **Investigation Areas**
 
-1. **Similar-Skill Grouping**
+1. **Similar-Skill Grouping (delta_mu)**
    - **Hypothesis**: Grouping crashes with similar skill levels (μ values) may produce more informative comparisons
-   - **Implementation**: Add `delta_mu` parameter to group crashes within score threshold
+   - **Current Implementation**: Uses random selection for all matchups
+   - **Proposed Change**: Add `delta_mu` parameter to group crashes within score threshold (|μ₁ - μ₂| ≤ delta_mu)
    - **Metrics**: Compare convergence speed and ranking quality vs random grouping
+   - **Rationale for current approach**: Random grouping is simpler and provides good exploration; unclear if nearby-μ grouping provides significant benefits
 
 2. **Uncertainty-Based Grouping**
    - **Hypothesis**: Grouping high-uncertainty crashes together may be more informative than mixing with random crashes
@@ -497,4 +442,25 @@ To investigate these approaches:
 - **Gradual Rollout**: Test on small tournaments before large-scale deployment
 
 **Note**: Any new grouping strategies should demonstrate statistically significant improvements in convergence speed or ranking quality before being merged to master.
+
+### Uncertainty-Based Stopping Conditions
+
+Currently, tournaments run until budget is exhausted. An alternative approach would be to stop when uncertainty converges below a threshold.
+
+**Potential Implementation:**
+- Add `--uncertainty-threshold` CLI parameter
+- Check average uncertainty in `_check_stopping_conditions()`
+- Stop when `avg_uncertainty < threshold`
+
+**Research Questions:**
+- What threshold value indicates sufficient convergence?
+- Should we use average uncertainty, max uncertainty, or top-k uncertainty?
+- How does early stopping affect ranking quality vs evaluation cost?
+
+**Trade-offs:**
+- Pro: Saves evaluations when rankings have converged
+- Con: May stop prematurely if uncertainty reduction is non-monotonic
+- Con: Adds complexity to stopping logic
+
+This feature was deliberately not implemented to keep the system simple and predictable. Budget-based stopping is easier to reason about and ensures consistent evaluation effort across runs.
 

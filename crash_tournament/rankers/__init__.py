@@ -1,7 +1,14 @@
 """
 Ranker implementations.
 
-TODO: Implement TrueSkillRanker
+Provides implementations of the Ranker interface for maintaining crash rankings
+using various ranking algorithms.
+
+Available implementations:
+- TrueSkillRanker: Uses Microsoft TrueSkill algorithm for ranking crashes
+  with support for k-way comparisons and uncertainty tracking
 """
 
-# Placeholder for future ranker implementations
+from .trueskill_ranker import TrueSkillRanker
+
+__all__ = ["TrueSkillRanker"]

@@ -5,11 +5,14 @@ Persists observations to JSONL file and snapshots to JSON file with checksums.
 """
 
 import json
-import os
 from pathlib import Path
-from typing import Iterable, Optional, Any
+from collections.abc import Iterable
+from typing import Any, override, cast, TYPE_CHECKING
 
-from ..interfaces import Storage
+if TYPE_CHECKING:
+    from loguru import Logger
+
+from ..interfaces import Storage, SystemState
 from ..models import OrdinalResult
 from ..logging_config import get_logger
 
@@ -21,6 +24,10 @@ class JSONLStorage(Storage):
     Uses JSONL file for observations (append-only) and JSON file for snapshots.
     Includes checksums and timestamps for data integrity.
     """
+    
+    observations_path: Path
+    snapshot_path: Path
+    logger: "Logger"
     
     def __init__(self, observations_path: Path, snapshot_path: Path):
         """
@@ -42,7 +49,8 @@ class JSONLStorage(Storage):
         
         self.logger.info(f"JSONL storage initialized: observations={self.observations_path}, snapshot={self.snapshot_path}")
     
-    def persist_ordinal(self, res: OrdinalResult) -> None:
+    @override
+    def persist_matchup_result(self, res: OrdinalResult) -> None:
         """Persist an ordinal evaluation result to JSONL."""
         self.logger.debug(f"Persisting ordinal result: {res.ordered_ids}")
         
@@ -53,16 +61,16 @@ class JSONLStorage(Storage):
             "parsed_result": res.parsed_result,
             "timestamp": res.timestamp,
             "judge_id": res.judge_id,
-            "group_size": res.group_size,
         }
         
         # Append to JSONL file
         with open(self.observations_path, "a", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False)
-            f.write("\n")
+            _ = json.dump(data, f, ensure_ascii=False)
+            _ = f.write("\n")
         
         self.logger.debug(f"Successfully persisted ordinal result to {self.observations_path}")
     
+    @override
     def load_observations(self) -> Iterable[OrdinalResult]:
         """Load all persisted ordinal results from JSONL."""
         if not self.observations_path.exists():
@@ -75,7 +83,7 @@ class JSONLStorage(Storage):
                     continue
                 
                 try:
-                    data = json.loads(line)
+                    data: dict[str, Any] = json.loads(line)
                     
                     # Create OrdinalResult
                     yield OrdinalResult(
@@ -84,24 +92,25 @@ class JSONLStorage(Storage):
                         parsed_result=data.get("parsed_result", {}),
                         timestamp=data.get("timestamp", 0.0),
                         judge_id=data["judge_id"],
-                        group_size=data["group_size"],
                     )
                 except json.JSONDecodeError:
                     # Skip corrupted lines
                     self.logger.warning(f"Skipping corrupted JSON line in {self.observations_path}")
                     continue
     
-    def save_snapshot(self, state: dict[str, Any]) -> None:
+    @override
+    def save_snapshot(self, state: SystemState) -> None:
         """Save system state snapshot to JSON (idempotent write)."""
-        self.logger.info(f"Saving snapshot with {len(state)} items to {self.snapshot_path}")
+        self.logger.info(f"Saving snapshot with ranker_state and runtime_state to {self.snapshot_path}")
         
         # Write to JSON file (idempotent)
         with open(self.snapshot_path, "w", encoding="utf-8") as f:
-            json.dump(state, f, indent=2, ensure_ascii=False)
+            _ = json.dump(state, f, indent=2, ensure_ascii=False)
         
         self.logger.debug("Snapshot saved successfully")
     
-    def load_snapshot(self) -> Optional[dict[str, Any]]:
+    @override
+    def load_snapshot(self) -> SystemState | None:
         """Load system state snapshot from JSON."""
         if not self.snapshot_path.exists():
             self.logger.debug("No snapshot file exists")
@@ -109,10 +118,16 @@ class JSONLStorage(Storage):
         
         self.logger.info(f"Loading snapshot from {self.snapshot_path}")
         with open(self.snapshot_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+            data: dict[str, Any] = json.load(f)
         
-        self.logger.info(f"Successfully loaded snapshot with {len(data)} items")
-        return data
+        # Validate that the loaded data has the required SystemState structure
+        if "ranker_state" not in data or "runtime_state" not in data:
+            self.logger.error("Invalid snapshot format - missing required SystemState fields")
+            return None
+        
+        self.logger.info(f"Successfully loaded snapshot with ranker_state and runtime_state")
+        # Cast to SystemState since we've validated the structure
+        return cast(SystemState, cast(object, data))
     
     def clear_observations(self) -> None:
         """Clear all observations (for testing)."""

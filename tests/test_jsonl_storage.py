@@ -28,7 +28,6 @@ class TestJSONLStorage:
                 ordered_ids=["a", "b", "c"],
                 raw_output="test output",
                 parsed_result={"rationale_top": "a is most exploitable"},
-                group_size=3,
             )
             
             # Act
@@ -41,7 +40,7 @@ class TestJSONLStorage:
             assert loaded.ordered_ids == ["a", "b", "c"]
             assert loaded.raw_output == "test output"
             assert loaded.parsed_result["rationale_top"] == "a is most exploitable"
-            assert loaded.group_size == 3
+            assert len(loaded.ordered_ids) == 3
     
     def test_persist_multiple_observations(self):
         """Append-only semantics should work for multiple observations."""
@@ -56,13 +55,11 @@ class TestJSONLStorage:
                     ordered_ids=["a", "b"],
                     raw_output="test1",
                     parsed_result={"rationale_top": "a beats b"},
-                    group_size=2,
                 ),
                 OrdinalResult(
                     ordered_ids=["c", "d", "e"],
                     raw_output="test2",
                     parsed_result={"rationale_top": "c > d > e"},
-                    group_size=3,
                 ),
             ]
             
@@ -115,7 +112,6 @@ class TestJSONLStorage:
                 ordered_ids=["a", "b"],
                 raw_output="test",
                 parsed_result={"rationale_top": "a wins"},
-                group_size=2,
             )
             storage.persist_ordinal(result)
             
@@ -161,7 +157,6 @@ class TestJSONLStorage:
                     ordered_ids=[f"a{i}", f"b{i}"],
                     raw_output=f"test{i}",
                     parsed_result={"rationale_top": f"a{i} wins"},
-                    group_size=2,
                 )
                 storage.persist_ordinal(result)
             
@@ -180,7 +175,6 @@ class TestJSONLStorage:
                 ordered_ids=["a", "b"],
                 raw_output="test",
                 parsed_result={"rationale_top": "a wins"},
-                group_size=2,
             )
             storage.persist_ordinal(result)
             assert storage.get_observation_count() == 1
@@ -224,7 +218,6 @@ class TestJSONLStorage:
                 ordered_ids=["a", "b"],
                 raw_output="test",
                 parsed_result={"rationale_top": "a wins"},
-                group_size=2,
             )
             
             # Act

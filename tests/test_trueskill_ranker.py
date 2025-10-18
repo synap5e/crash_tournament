@@ -20,7 +20,6 @@ class TestTrueSkillRanker:
             ordered_ids=["winner", "loser"],
             raw_output="test",
             parsed_result={"rationale_top": "winner beats loser"},
-            group_size=2,
         )
         
         # Get initial scores
@@ -46,7 +45,6 @@ class TestTrueSkillRanker:
             ordered_ids=["a", "b", "c", "d"],
             raw_output="test",
             parsed_result={"rationale_top": "a > b > c > d"},
-            group_size=4,
         )
         
         # Get initial scores
@@ -82,7 +80,6 @@ class TestTrueSkillRanker:
             ordered_ids=["a", "b"],
             raw_output="test",
             parsed_result={"rationale_top": "a beats b"},
-            group_size=2,
         )
         
         # Act - update with different weights
@@ -120,7 +117,6 @@ class TestTrueSkillRanker:
             ordered_ids=["a", "b", "c"],
             raw_output="test",
             parsed_result={"rationale_top": "a > b > c"},
-            group_size=3,
         )
         ranker1.update_with_ordinal(result)
         
@@ -141,7 +137,6 @@ class TestTrueSkillRanker:
             ordered_ids=["a", "b"],
             raw_output="test",
             parsed_result={"rationale_top": "a beats b"},
-            group_size=2,
         )
         ranker.update_with_ordinal(result)
         
@@ -162,7 +157,6 @@ class TestTrueSkillRanker:
             ordered_ids=["a", "b"],
             raw_output="test",
             parsed_result={"rationale_top": "a beats b"},
-            group_size=2,
         )
         ranker.update_with_ordinal(result)
         
@@ -187,7 +181,6 @@ class TestTrueSkillRanker:
                 ordered_ids=["a", "b", "c"],
                 raw_output="test",
                 parsed_result={"rationale_top": "consistent ordering"},
-                group_size=3,
             )
             ranker.update_with_ordinal(result)
         
@@ -210,7 +203,6 @@ class TestTrueSkillRanker:
             ordered_ids=["x", "y", "z"],
             raw_output="test",
             parsed_result={"rationale_top": "x > y > z"},
-            group_size=3,
         )
         ranker.update_with_ordinal(result)
         

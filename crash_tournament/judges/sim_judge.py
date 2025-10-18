@@ -5,7 +5,8 @@ Samples k-way orderings from latent scores with noise parameter for testing.
 """
 
 import random
-from typing import Dict, List, Sequence
+from collections.abc import Sequence
+from typing import override
 
 from ..interfaces import Judge
 from ..models import Crash, OrdinalResult
@@ -18,7 +19,7 @@ class SimulatedJudge(Judge):
     Samples k-way orderings from ground truth scores with added noise.
     """
     
-    def __init__(self, ground_truth: Dict[str, float], noise: float = 0.1):
+    def __init__(self, ground_truth: dict[str, float], noise: float = 0.1):
         """
         Initialize simulated judge.
         
@@ -40,7 +41,7 @@ class SimulatedJudge(Judge):
         noise = random.gauss(0, noise_scale)
         return score + noise
     
-    def _get_noisy_scores(self, crashes: Sequence[Crash]) -> List[tuple[Crash, float]]:
+    def _get_noisy_scores(self, crashes: Sequence[Crash]) -> list[tuple[Crash, float]]:
         """Get noisy scores for crashes."""
         noisy_scores = []
         
@@ -55,7 +56,8 @@ class SimulatedJudge(Judge):
         
         return noisy_scores
     
-    def evaluate_group(self, crashes: Sequence[Crash], *, grading: bool = False) -> OrdinalResult:
+    @override
+    def evaluate_matchup(self, crashes: Sequence[Crash]) -> OrdinalResult:
         """
         Evaluate group of crashes using simulated ground truth + noise.
         
@@ -84,7 +86,7 @@ class SimulatedJudge(Judge):
         rationale_top = f"Simulated evaluation: {top_crash.crash_id} scored {top_score:.3f} (ground truth: {self.ground_truth.get(top_crash.crash_id, 0.0):.3f})"
         
         # Generate raw output
-        raw_output = f"Simulated judge evaluation:\n"
+        raw_output = "Simulated judge evaluation:\n"
         for i, (crash, score) in enumerate(noisy_scores):
             true_score = self.ground_truth.get(crash.crash_id, 0.0)
             raw_output += f"{i+1}. {crash.crash_id}: {score:.3f} (true: {true_score:.3f})\n"
@@ -94,10 +96,9 @@ class SimulatedJudge(Judge):
             raw_output=raw_output,
             parsed_result={"rationale_top": rationale_top},
             judge_id=self.judge_id,
-            group_size=len(crashes),
         )
     
-    def get_ground_truth(self) -> Dict[str, float]:
+    def get_ground_truth(self) -> dict[str, float]:
         """Get ground truth scores for debugging."""
         return self.ground_truth.copy()
     

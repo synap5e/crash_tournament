@@ -1,7 +1,5 @@
 # Project-specific ignores
 **/__pycache__
-.cursor/
-.aidocs/
 output/
 output*/
 *output/

@@ -17,7 +17,7 @@ class TestUncertaintySelector:
         """Should prioritize crashes with high sigma values."""
         # Arrange
         ranker = TrueSkillRanker()
-        selector = UncertaintySelector(ranker, K_uncertain=5, delta_mu=2.0)
+        selector = UncertaintySelector(ranker, K_uncertain=5)
         
         # Set up known ratings with different uncertainties
         # High uncertainty crash
@@ -25,7 +25,6 @@ class TestUncertaintySelector:
             ordered_ids=["high_uncertainty", "other"],
             raw_output="test",
             parsed_result={"rationale_top": "high uncertainty wins"},
-            group_size=2,
         ))
         
         # Low uncertainty crash (multiple updates to reduce sigma)
@@ -34,7 +33,6 @@ class TestUncertaintySelector:
                 ordered_ids=["low_uncertainty", "other"],
                 raw_output="test",
                 parsed_result={"rationale_top": "low uncertainty wins"},
-                group_size=2,
             ))
         
         crash_ids = ["high_uncertainty", "low_uncertainty", "other"]
@@ -56,11 +54,11 @@ class TestUncertaintySelector:
         assert high_uncertainty_appearances >= low_uncertainty_appearances, \
             "High uncertainty crash should appear in at least as many groups"
     
-    def test_groups_contain_nearby_crashes(self):
-        """Should respect delta_mu constraint when selecting nearby crashes."""
+    def test_groups_contain_random_crashes(self):
+        """Should use random grouping after selecting uncertain crashes."""
         # Arrange
         ranker = TrueSkillRanker()
-        selector = UncertaintySelector(ranker, delta_mu=1.0)  # Small delta
+        selector = UncertaintySelector(ranker)
         
         # Set up crashes with known mu values
         # Create a target crash with mu=25
@@ -68,7 +66,6 @@ class TestUncertaintySelector:
             ordered_ids=["target", "other1"],
             raw_output="test",
             parsed_result={"rationale_top": "target wins"},
-            group_size=2,
         ))
         
         # Create nearby crash (mu should be close to target)
@@ -76,7 +73,6 @@ class TestUncertaintySelector:
             ordered_ids=["nearby", "other2"],
             raw_output="test",
             parsed_result={"rationale_top": "nearby wins"},
-            group_size=2,
         ))
         
         # Create distant crash (mu should be far from target)
@@ -85,7 +81,6 @@ class TestUncertaintySelector:
                 ordered_ids=["distant", "other3"],
                 raw_output="test",
                 parsed_result={"rationale_top": "distant wins"},
-                group_size=2,
             ))
         
         crash_ids = ["target", "nearby", "distant", "other1", "other2", "other3"]
@@ -96,13 +91,14 @@ class TestUncertaintySelector:
         # Assert
         assert len(groups) > 0, "Should generate groups"
         
-        # Groups containing target should more often contain nearby than distant
+        # All groups should contain the target crash (highest uncertainty)
         target_groups = [group for group in groups if "target" in group]
-        nearby_with_target = sum(1 for group in target_groups if "nearby" in group)
-        distant_with_target = sum(1 for group in target_groups if "distant" in group)
+        assert len(target_groups) > 0, "Should select target crash (highest uncertainty)"
         
-        assert nearby_with_target >= distant_with_target, \
-            "Nearby crashes should be selected more often than distant ones"
+        # Groups should be filled with random crashes (not necessarily nearby)
+        for group in target_groups:
+            assert len(group) == 3, "Groups should have correct size"
+            assert "target" in group, "Target should be in groups"
     
     def test_respects_max_evals_per_crash(self):
         """Should not over-sample crashes when max_evals_per_crash is set."""
@@ -204,7 +200,6 @@ class TestUncertaintySelector:
                 ordered_ids=[f"crash_{i}", "other"],
                 raw_output="test",
                 parsed_result={"rationale_top": f"crash_{i} wins"},
-                group_size=2,
             ))
         
         # Act
@@ -225,10 +220,10 @@ class TestUncertaintySelector:
         assert all(len(group) >= 2 for group in groups), "All groups should have at least 2 crashes"
     
     def test_delta_mu_parameter(self):
-        """Should respect delta_mu parameter for nearby crash selection."""
+        """Should use random grouping (delta_mu not implemented)."""
         # Arrange
         ranker = TrueSkillRanker()
-        selector = UncertaintySelector(ranker, delta_mu=0.5)  # Very small delta
+        selector = UncertaintySelector(ranker)
         
         # Set up crashes with known mu values
         crash_ids = ["target", "nearby", "distant"]
@@ -238,26 +233,28 @@ class TestUncertaintySelector:
             ordered_ids=["nearby", "other"],
             raw_output="test",
             parsed_result={"rationale_top": "nearby wins"},
-            group_size=2,
         ))
         ranker.update_with_ordinal(OrdinalResult(
             ordered_ids=["distant", "other"],
             raw_output="test",
             parsed_result={"rationale_top": "distant wins"},
-            group_size=2,
         ))
         
         # Act
         groups = selector.next_groups(all_crash_ids=crash_ids, k=2, budget=3)
         
         # Assert
-        # With very small delta_mu, most groups should contain target alone
-        # or with crashes that happen to be nearby by chance
+        # With random grouping, groups should contain target and random crashes
         assert len(groups) > 0, "Should generate some groups"
         
         # Target should appear in groups (it's the highest uncertainty)
         target_groups = [group for group in groups if "target" in group]
         assert len(target_groups) > 0, "Target should appear in some groups"
+        
+        # Groups should contain random crashes (delta_mu not implemented)
+        for group in target_groups:
+            assert len(group) == 2, "Groups should have correct size"
+            assert "target" in group, "Target should be in groups"
     
     def test_handles_empty_crash_list(self):
         """Should handle empty crash list gracefully."""
@@ -304,7 +301,6 @@ class TestUncertaintySelector:
             ordered_ids=["medium_uncertainty", "other"],
             raw_output="test",
             parsed_result={"rationale_top": "medium wins"},
-            group_size=2,
         ))
         
         # Low uncertainty crash (many updates)
@@ -313,7 +309,6 @@ class TestUncertaintySelector:
                 ordered_ids=["low_uncertainty", "other"],
                 raw_output="test",
                 parsed_result={"rationale_top": "low wins"},
-                group_size=2,
             ))
         
         # Test with different temperatures
@@ -357,7 +352,6 @@ class TestUncertaintySelector:
                 ordered_ids=["low_uncertainty", "other"],
                 raw_output="test",
                 parsed_result={"rationale_top": "low wins"},
-                group_size=2,
             ))
         
         # Act

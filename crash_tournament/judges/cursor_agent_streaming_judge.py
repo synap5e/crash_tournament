@@ -8,15 +8,11 @@ Provides real-time progress updates during agent execution.
 import json
 import subprocess
 import time
-from pathlib import Path
-from typing import List, Sequence
+from typing import Any, cast, override
 
-from ..models import Crash, OrdinalResult
 from .cursor_agent_judge import (
     CursorAgentJudge,
-    CursorAgentJudgeError,
-    NoJsonFromCursorAgentError,
-    InvalidCursorAgentResponseError
+    NoJsonFromCursorAgentError
 )
 
 
@@ -39,10 +35,11 @@ class CursorAgentStreamingJudge(CursorAgentJudge):
             prompt_file: Path to markdown prompt file (default: ordinal_judge.md)
         """
         super().__init__(timeout, prompt_file)
-        self.judge_id = "cursor_agent_streaming"
+        self.judge_id: str = "cursor_agent_streaming"
     
     
     
+    @override
     def _invoke_cursor_agent(self, prompt: str) -> str:
         """
         Invoke cursor-agent with streaming output format.
@@ -91,30 +88,30 @@ class CursorAgentStreamingJudge(CursorAgentJudge):
                     raise subprocess.TimeoutExpired(cmd, self.timeout)
                 
                 try:
-                    msg = json.loads(line.strip())
+                    msg: dict[str, Any] = json.loads(line.strip())  # type: ignore[reportExplicitAny]
                     
                     # Log progress based on message type
                     if msg.get("type") == "assistant":
-                        content = msg.get("message", {}).get("content", [])
+                        content: list[dict[str, Any]] = cast(list[dict[str, Any]], msg.get("message", {}).get("content", []))  # type: ignore[reportExplicitAny]
                         for item in content:
                             if item.get("type") == "text":
-                                text = item.get("text", "")
+                                text: str = cast(str, item.get("text", ""))
                                 # Log full agent thinking with repr to avoid line breaks
                                 if text:
-                                    text_preview = text[:100] + "..." if len(text) > 100 else text
+                                    text_preview: str = text[:100] + "..." if len(text) > 100 else text
                                     self.logger.info(f"Agent: {repr(text_preview)} ({len(text)} chars)")
                                     self.logger.debug(f"Full agent response: {repr(text)}")
                     
                     elif msg.get("type") == "tool_call":
                         if msg.get("subtype") == "started":
-                            tool_call_data = msg.get("tool_call", {})
+                            tool_call_data: dict[str, Any] = cast(dict[str, Any], msg.get("tool_call", {}))  # type: ignore[reportExplicitAny]
                             # Extract tool name (first key that ends with 'ToolCall')
                             tool_name = next((k.replace('ToolCall', '') for k in tool_call_data.keys() 
                                              if k.endswith('ToolCall')), "unknown")
                             
                             # Extract args
-                            tool_info = tool_call_data.get(f"{tool_name}ToolCall", {})
-                            args = tool_info.get("args", {})
+                            tool_info: dict[str, Any] = cast(dict[str, Any], tool_call_data.get(f"{tool_name}ToolCall", {}))  # type: ignore[reportExplicitAny]
+                            args: dict[str, Any] = cast(dict[str, Any], tool_info.get("args", {}))  # type: ignore[reportExplicitAny]
                             
                             # Create a concise arg summary
                             arg_summary = ", ".join(f"{k}={v}" for k, v in list(args.items())[:3])
@@ -123,47 +120,44 @@ class CursorAgentStreamingJudge(CursorAgentJudge):
                                 
                             self.logger.debug(f"Tool: {tool_name}({arg_summary})")
                         elif msg.get("subtype") == "completed":
-                            tool_call_data = msg.get("tool_call", {})
+                            tool_call_data = cast(dict[str, Any], msg.get("tool_call", {}))  # type: ignore[reportExplicitAny]
                             tool_name = next((k.replace('ToolCall', '') for k in tool_call_data.keys() 
                                              if k.endswith('ToolCall')), "unknown")
                             
-                            tool_info = tool_call_data.get(f"{tool_name}ToolCall", {})
-                            result = tool_info.get("result", {})
+                            tool_info = cast(dict[str, Any], tool_call_data.get(f"{tool_name}ToolCall", {}))  # type: ignore[reportExplicitAny]
+                            result: dict[str, Any] = cast(dict[str, Any], tool_info.get("result", {}))  # type: ignore[reportExplicitAny]
                             
                             # Summarize result based on type
-                            if isinstance(result, dict):
-                                if "success" in result:
-                                    success_data = result["success"]
-                                    if "files" in success_data:
-                                        file_count = success_data.get('totalFiles', len(success_data.get('files', [])))
-                                        self.logger.debug(f"Tool {tool_name} => found {file_count} files")
-                                    elif "content" in success_data:
-                                        content = success_data.get("content", "")
-                                        lines = content.split('\n')
-                                        total_lines = success_data.get("totalLines", len(lines))
-                                        
-                                        # Show content if short (< 10 lines), else first & last 5 lines
-                                        if total_lines <= 10:
-                                            # Truncate super long lines (> 200 chars)
-                                            display_lines = [line[:200] + "..." if len(line) > 200 else line 
-                                                           for line in lines]
-                                            content_preview = '\n'.join(display_lines)
-                                            self.logger.debug(f"Tool {tool_name} => {total_lines} lines:\n{content_preview}")
-                                        else:
-                                            # Show first 5 and last 5 lines with truncation
-                                            first_5 = [line[:200] + "..." if len(line) > 200 else line 
-                                                      for line in lines[:5]]
-                                            last_5 = [line[:200] + "..." if len(line) > 200 else line 
-                                                     for line in lines[-5:]]
-                                            content_preview = '\n'.join(first_5) + '\n...\n' + '\n'.join(last_5)
-                                            self.logger.debug(f"Tool {tool_name} => {total_lines} lines (showing first & last 5):\n{content_preview}")
+                            if "success" in result:
+                                success_data: dict[str, Any] = cast(dict[str, Any], result["success"])  # type: ignore[reportExplicitAny]
+                                if "files" in success_data:
+                                    file_count: int = success_data.get('totalFiles', len(cast(list[Any], success_data.get('files', []))))  # type: ignore[reportExplicitAny]
+                                    self.logger.debug(f"Tool {tool_name} => found {file_count} files")
+                                elif "content" in success_data:
+                                    content_str: str = cast(str, success_data.get("content", ""))
+                                    lines: list[str] = content_str.split('\n')
+                                    total_lines: int = success_data.get("totalLines", len(lines))
+                                    
+                                    # Show content if short (< 10 lines), else first & last 5 lines
+                                    if total_lines <= 10:
+                                        # Truncate super long lines (> 200 chars)
+                                        display_lines: list[str] = [line[:200] + "..." if len(line) > 200 else line 
+                                                       for line in lines]
+                                        content_preview = '\n'.join(display_lines)
+                                        self.logger.debug(f"Tool {tool_name} => {total_lines} lines:\n{content_preview}")
                                     else:
-                                        self.logger.debug(f"Tool {tool_name} => success")
-                                elif "error" in result:
-                                    error_msg = result['error'].get('errorMessage', 'unknown')
-                                    self.logger.debug(f"Tool {tool_name} => error: {error_msg}")
+                                        # Show first 5 and last 5 lines with truncation
+                                        first_5: list[str] = [line[:200] + "..." if len(line) > 200 else line 
+                                                  for line in lines[:5]]
+                                        last_5: list[str] = [line[:200] + "..." if len(line) > 200 else line 
+                                                 for line in lines[-5:]]
+                                        content_preview = '\n'.join(first_5) + '\n...\n' + '\n'.join(last_5)
+                                        self.logger.debug(f"Tool {tool_name} => {total_lines} lines (showing first & last 5):\n{content_preview}")
                                 else:
-                                    self.logger.debug(f"Tool {tool_name} => completed")
+                                    self.logger.debug(f"Tool {tool_name} => success")
+                            elif "error" in result:
+                                error_msg: str = cast(str, result['error'].get('errorMessage', 'unknown'))
+                                self.logger.debug(f"Tool {tool_name} => error: {error_msg}")
                             else:
                                 self.logger.debug(f"Tool {tool_name} => completed")
                     
@@ -173,13 +167,13 @@ class CursorAgentStreamingJudge(CursorAgentJudge):
                         self.logger.info("Received final result from cursor-agent")
                         break
                 
-                except json.JSONDecodeError as e:
+                except json.JSONDecodeError:
                     # Log malformed JSON lines - may indicate issues with cursor-agent output
                     self.logger.warning(f"Skipping malformed JSON line from cursor-agent: {line[:100]}...")
                     continue
             
             # Wait for process to complete
-            process.wait()
+            _ = process.wait()
             
             if result_message is None:
                 raise ValueError("No result message found in cursor-agent stream")
@@ -188,7 +182,7 @@ class CursorAgentStreamingJudge(CursorAgentJudge):
                 raise ValueError(f"cursor-agent failed: {result_message.get('subtype')}")
             
             # Extract the result content
-            result_content = result_message.get("result", "")
+            result_content: str = cast(str, result_message.get("result", ""))
             self.logger.info(f"cursor-agent completed successfully, result length: {len(result_content)} chars")
             
             # Log the full result content for debugging
@@ -255,7 +249,8 @@ class CursorAgentStreamingJudge(CursorAgentJudge):
             self.logger.info(f"Extracted JSON from output: {json_text}")
             return json_text
     
-    def get_agent_command(self) -> List[str]:
+    @override
+    def get_agent_command(self) -> list[str]:
         """Get the command used to invoke cursor-agent."""
         return ["cursor-agent", "--output-format=stream-json", "-p"]
     
