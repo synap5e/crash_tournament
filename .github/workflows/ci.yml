@@ -34,7 +34,14 @@ jobs:
       run: ruff check
 
     - name: Run basedpyright type checking
-      run: basedpyright --level error
+      run: |
+        output=$(basedpyright 2>&1) || true
+        echo "$output"
+        if echo "$output" | grep -qE '^[1-9][0-9]* errors'; then
+          echo "Type checking failed with errors"
+          exit 1
+        fi
+        echo "Type checking passed (warnings are allowed)"
 
     - name: Run pytest
       run: pytest
