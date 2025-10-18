@@ -1,0 +1,13 @@
+
+{
+    "version": "1.31.7",
+    "time": "1760761338644",
+    "generalDiagnostics": [],
+    "summary": {
+        "filesAnalyzed": 32,
+        "errorCount": 0,
+        "warningCount": 322,
+        "informationCount": 0,
+        "timeInSec": 1.667
+    }
+}

@@ -9,7 +9,7 @@ from .sim_judge import SimulatedJudge
 
 __all__ = [
     "CursorAgentJudge",
-    "CursorAgentStreamingJudge", 
+    "CursorAgentStreamingJudge",
     "DummyJudge",
     "SimulatedJudge",
 ]
