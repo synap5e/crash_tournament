@@ -18,28 +18,6 @@ For k=2, this reduces to standard TrueSkill with a single pairwise comparison pe
 
 ## Usage
 
-### Quick Start
-
-Rank crashes using the demo script:
-
-```bash
-# With cursor-agent judge
-uv run python -m crash_tournament.rank_crashes_demo \
-    --judge cursor_agent \
-    crash1.json crash2.json crash3.json crash4.json
-
-# With simulated judge (for testing)
-uv run python -m crash_tournament.rank_crashes_demo \
-    --judge sim \
-    crash1.json crash2.json crash3.json
-
-# With custom prompt
-uv run python -m crash_tournament.rank_crashes_demo \
-    --judge cursor_agent \
-    --prompt my_prompt.md \
-    crash*.json
-```
-
 ### Full Tournament
 
 Run a complete tournament with the orchestrator:
@@ -81,6 +59,28 @@ uv run python -m crash_tournament \
 - `--budget`: Total number of matchup evaluations (default: matchup_size * 250)
 - `--snapshot-every`: Save snapshot every N matchups (default: 10)
 - `--workers`: Number of worker threads (default: 1)
+
+### Testing judges
+
+Compare crashes using the demo script:
+
+```bash
+# With cursor-agent judge
+uv run python -m crash_tournament.rank_crashes_demo \
+    --judge cursor_agent \
+    crash1.json crash2.json crash3.json crash4.json
+
+# With simulated judge (for testing)
+uv run python -m crash_tournament.rank_crashes_demo \
+    --judge sim \
+    crash1.json crash2.json crash3.json
+
+# With custom prompt
+uv run python -m crash_tournament.rank_crashes_demo \
+    --judge cursor_agent \
+    --prompt my_prompt.md \
+    crash*.json
+```
 
 ## Architecture
 
