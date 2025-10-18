@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from typing_extensions import override
 
 from ..interfaces import Judge
-from ..models import ValidationError
+from ..exceptions import ValidationError
 from ..models import Crash, OrdinalResult
 
 

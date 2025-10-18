@@ -56,7 +56,7 @@ class TestDirectoryCrashFetcher:
             assert len(crashes) == 2, "Should load 2 crashes"
             
             # Check first crash (directory-based ID)
-            crash_000 = next(c for c in crashes if c.crash_id == "crash_000_crash")
+            _ = next(c for c in crashes if c.crash_id == "crash_000_crash")
             # Crash model only has crash_id, file_path, and timestamp - no JSON fields
             
             # Check second crash (directory-based ID)

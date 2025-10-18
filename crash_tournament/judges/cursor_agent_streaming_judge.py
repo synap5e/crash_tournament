@@ -15,7 +15,7 @@ from .cursor_agent_judge import (
     CursorAgentJudge,
     NoJsonFromCursorAgentError
 )
-from ..models import ValidationError
+from ..exceptions import ValidationError
 
 
 

@@ -8,12 +8,12 @@ import json
 import subprocess
 from pathlib import Path
 from collections.abc import Sequence
-from typing import Any, TypedDict, cast, TYPE_CHECKING
+from typing import Any, TypedDict, cast
 from typing_extensions import NotRequired, override
-from loguru import Logger
+from loguru._logger import Logger
 
-from ..interfaces import Judge, JudgeError
-from ..models import ValidationError
+from ..interfaces import Judge
+from ..exceptions import JudgeError, ValidationError
 from ..models import Crash, OrdinalResult
 from ..logging_config import get_logger
 

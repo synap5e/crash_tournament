@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import cast
 
 from crash_tournament.models import Crash
-from crash_tournament.interfaces import ValidationError
+from crash_tournament.exceptions import ValidationError
 from crash_tournament.judges.cursor_agent_judge import CursorAgentJudge
 from crash_tournament.judges.cursor_agent_streaming_judge import CursorAgentStreamingJudge
 from crash_tournament.judges.sim_judge import SimulatedJudge

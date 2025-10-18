@@ -8,7 +8,7 @@ import threading
 from typing import cast, override, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from loguru import Logger
+    from loguru._logger import Logger
 
 from trueskill import Rating, rate_1vs1, setup  # type: ignore[import-untyped]
 

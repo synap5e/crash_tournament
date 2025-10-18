@@ -8,10 +8,7 @@ from dataclasses import dataclass, field
 from typing import Any
 import time
 
-
-class ValidationError(Exception):
-    """Base exception for validation-related errors."""
-    pass
+from .exceptions import ValidationError
 
 
 @dataclass

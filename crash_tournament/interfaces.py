@@ -30,16 +30,6 @@ class SystemState(TypedDict):
     runtime_state: dict[str, int]  # evaluated_matchups, etc.
 
 
-class JudgeError(Exception):
-    """Base exception for all judge-related errors."""
-    pass
-
-
-
-
-class ConfigurationError(Exception):
-    """Base exception for configuration-related errors."""
-    pass
 
 
 class CrashFetcher(ABC):
