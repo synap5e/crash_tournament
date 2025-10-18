@@ -12,8 +12,8 @@ Focus on uncertainty-based sampling logic.
 
 # class TestUncertaintySelector:
 #     """Test UncertaintySelector behavior through public interface."""
-#     
-#     def test_selects_high_uncertainty_crashes(self):
+#
+#     def test_selects_high_uncertainty_crashes(self) -> None:
 #         """Should prioritize crashes with high sigma values."""
 #         # TODO: Implement UncertaintySelector
 #         # Arrange

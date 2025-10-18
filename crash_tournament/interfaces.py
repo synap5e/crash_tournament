@@ -7,11 +7,13 @@ All interfaces are synchronous to avoid asyncio complexity in core interfaces.
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Sequence
 from typing import TypedDict
+
 from .models import Crash, OrdinalResult
 
 
 class RankerStatistics(TypedDict):
     """TypedDict for ranker statistics."""
+
     eval_counts: dict[str, int]
     win_counts: dict[str, int]
     rankings: dict[str, list[int]]
@@ -20,21 +22,21 @@ class RankerStatistics(TypedDict):
 
 class RankerState(TypedDict):
     """TypedDict for ranker snapshot state."""
+
     ratings: dict[str, dict[str, float]]  # crash_id -> {"mu": float, "sigma": float}
     statistics: RankerStatistics
 
 
 class SystemState(TypedDict):
     """TypedDict for system snapshot state."""
+
     ranker_state: RankerState
     runtime_state: dict[str, int]  # evaluated_matchups, etc.
 
 
-
-
 class CrashFetcher(ABC):
     """Interface for fetching crash data."""
-    
+
     @abstractmethod
     def list_crashes(self) -> Iterable[Crash]:
         """Return all available crashes."""
@@ -48,17 +50,17 @@ class CrashFetcher(ABC):
 
 class Judge(ABC):
     """Interface for evaluating crash matchups."""
-    
+
     @abstractmethod
     def evaluate_matchup(self, crashes: Sequence[Crash]) -> OrdinalResult:
         """
         Synchronous evaluation of a crash matchup.
-        
+
         May block. Caller runs in threadpool for concurrency.
-        
+
         Args:
             crashes: Sequence of crashes to evaluate
-            
+
         Returns:
             OrdinalResult with ordered crash IDs and rationale
         """
@@ -67,7 +69,7 @@ class Judge(ABC):
 
 class Storage(ABC):
     """Interface for persisting results and state."""
-    
+
     @abstractmethod
     def persist_matchup_result(self, res: OrdinalResult) -> None:
         """Persist a matchup evaluation result."""
@@ -82,7 +84,7 @@ class Storage(ABC):
     def save_snapshot(self, state: SystemState) -> None:
         """
         Save system state snapshot.
-        
+
         Include checksum and timestamp per doc line 180.
         """
         pass
@@ -95,12 +97,12 @@ class Storage(ABC):
 
 class Ranker(ABC):
     """Interface for ranking crashes by exploitability."""
-    
+
     @abstractmethod
     def update_with_ordinal(self, res: OrdinalResult, weight: float = 1.0) -> None:
         """
         Update rankings with ordinal result.
-        
+
         Use 1/(k-1) to scale k-way conversions per doc lines 146–147.
         """
         pass
@@ -125,7 +127,7 @@ class Ranker(ABC):
         """Load ranking state from snapshot."""
         pass
 
-    @abstractmethod  
+    @abstractmethod
     def get_total_eval_count(self, crash_id: str) -> int:
         """Get total evaluation count for a crash."""
         pass
@@ -143,16 +145,18 @@ class Ranker(ABC):
 
 class Selector(ABC):
     """Interface for selecting crash matchups to evaluate."""
-    
+
     @abstractmethod
-    def select_matchup(self, all_crash_ids: Sequence[str], matchup_size: int) -> Sequence[str] | None:
+    def select_matchup(
+        self, all_crash_ids: Sequence[str], matchup_size: int
+    ) -> Sequence[str] | None:
         """
         Select crash ID matchup to evaluate.
-        
+
         Args:
             all_crash_ids: All available crash IDs to select from
             matchup_size: Number of crashes per matchup
-            
+
         Returns:
             List of crash IDs for matchup, or None if no more matchups available
         """
