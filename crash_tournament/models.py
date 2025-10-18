@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from typing import Any
 import time
 
+from .interfaces import ValidationError
+
 
 @dataclass
 class Crash:
@@ -20,9 +22,9 @@ class Crash:
     def __post_init__(self):
         """Validate crash data."""
         if not self.crash_id:
-            raise ValueError("crash_id cannot be empty")
+            raise ValidationError("crash_id cannot be empty")
         if not self.file_path:
-            raise ValueError("file_path cannot be empty")
+            raise ValidationError("file_path cannot be empty")
 
 
 @dataclass
@@ -38,6 +40,6 @@ class OrdinalResult:
     def __post_init__(self):
         """Validate ordinal result data."""
         if not self.ordered_ids:
-            raise ValueError("ordered_ids cannot be empty")
+            raise ValidationError("ordered_ids cannot be empty")
 
 

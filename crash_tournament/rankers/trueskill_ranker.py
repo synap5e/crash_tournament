@@ -58,6 +58,14 @@ class TrueSkillRanker(Ranker):
         self.logger.info(f"TrueSkill ranker initialized: mu={mu}, sigma={sigma}, tau={tau}")
     
     def _get_or_create_rating(self, crash_id: str) -> Rating:
+        """Get existing rating or create new one with default values.
+        
+        Args:
+            crash_id: Unique identifier for the crash
+            
+        Returns:
+            TrueSkill Rating object for the crash
+        """
         """Get existing rating or create default one for unseen crash."""
         if crash_id not in self.ratings:
             self.ratings[crash_id] = Rating(mu=self.mu, sigma=self.sigma)  # type: ignore[arg-type]

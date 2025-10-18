@@ -13,7 +13,7 @@ from typing import Any, TypedDict, NotRequired, cast, override, TYPE_CHECKING
 if TYPE_CHECKING:
     from loguru import Logger
 
-from ..interfaces import Judge, JudgeError
+from ..interfaces import Judge, JudgeError, ValidationError
 from ..models import Crash, OrdinalResult
 from ..logging_config import get_logger
 
@@ -83,7 +83,7 @@ class CursorAgentJudge(Judge):
             Exception: If cursor-agent fails or returns invalid output
         """
         if not crashes:
-            raise ValueError("Cannot evaluate empty crash list")
+            raise ValidationError("Cannot evaluate empty crash list")
         
         # Build prompt from markdown file
         prompt = self._build_prompt(crashes)

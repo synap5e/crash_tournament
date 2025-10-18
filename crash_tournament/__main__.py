@@ -199,8 +199,8 @@ def wire_components(args: CLIArgs) -> tuple[
     ranker = TrueSkillRanker()
     
     # Create selector
-    logger.info("Creating uncertainty selector")
-    selector = RandomSelector(ranker)
+        logger.info("Creating random selector")
+        selector = RandomSelector(ranker)
     
     # Create judge based on type
     logger.info(f"Creating {args['judge_type']} judge")

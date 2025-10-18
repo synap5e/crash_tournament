@@ -35,6 +35,16 @@ class JudgeError(Exception):
     pass
 
 
+class ValidationError(Exception):
+    """Base exception for validation-related errors."""
+    pass
+
+
+class ConfigurationError(Exception):
+    """Base exception for configuration-related errors."""
+    pass
+
+
 class CrashFetcher(ABC):
     """Interface for fetching crash data."""
     

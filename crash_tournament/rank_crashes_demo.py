@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import cast
 
 from crash_tournament.models import Crash
+from crash_tournament.interfaces import ValidationError
 from crash_tournament.judges.cursor_agent_judge import CursorAgentJudge
 from crash_tournament.judges.cursor_agent_streaming_judge import CursorAgentStreamingJudge
 from crash_tournament.judges.sim_judge import SimulatedJudge
@@ -28,12 +29,12 @@ def create_crash_from_path(filepath: str) -> Crash:
     if not path.exists():
         raise FileNotFoundError(f"Crash file not found: {filepath}")
     
-    # Extract crash_id from parent directory name (more unique than filename)
-    # This matches what cursor-agent returns in its analysis
-    crash_id = path.parent.name
+    # Extract crash_id from parent directory name and file stem for unique identification
+    # This matches DirectoryCrashFetcher's crash ID generation strategy
+    crash_id = f"{path.parent.name}_{path.stem}"
     
-    # Store the file path as-is (relative to current working directory)
-    file_path = str(path)
+    # Store the absolute file path (matches DirectoryCrashFetcher behavior)
+    file_path = str(path.resolve())
     
     return Crash(
         crash_id=crash_id,
@@ -41,7 +42,7 @@ def create_crash_from_path(filepath: str) -> Crash:
     )
 
 
-def create_judge(judge_type: str, timeout: float = 500.0, prompt_file: str | None = None):
+def create_judge_instance(judge_type: str, timeout: float = 300.0, prompt_file: str | None = None):
     """Create a judge instance based on type."""
     if judge_type == "cursor_agent":
         return CursorAgentJudge(timeout=timeout, prompt_file=prompt_file)
@@ -54,7 +55,7 @@ def create_judge(judge_type: str, timeout: float = 500.0, prompt_file: str | Non
     elif judge_type == "dummy":
         return DummyJudge(mode="deterministic")
     else:
-        raise ValueError(f"Unknown judge type: {judge_type}")
+        raise ValidationError(f"Unknown judge type: {judge_type}")
 
 
 def main():
@@ -162,7 +163,7 @@ Examples:
             ground_truth: dict[str, float] = {crash.crash_id: float(i) for i, crash in enumerate(crashes)}
             judge = SimulatedJudge(ground_truth, noise=0.1)
         else:
-            judge = create_judge(judge_type, timeout=timeout, prompt_file=prompt)
+            judge = create_judge_instance(judge_type, timeout=timeout, prompt_file=prompt)
         
         # Test connection for cursor-agent
         if judge_type in ["cursor_agent", "cursor_agent_streaming"]:

@@ -8,7 +8,7 @@ import random
 from collections.abc import Sequence
 from typing import override
 
-from ..interfaces import Judge
+from ..interfaces import Judge, ValidationError
 from ..models import Crash, OrdinalResult
 
 
@@ -69,7 +69,7 @@ class SimulatedJudge(Judge):
             OrdinalResult with ordered crash IDs
         """
         if not crashes:
-            raise ValueError("Cannot evaluate empty group")
+            raise ValidationError("Cannot evaluate empty group")
         
         # Get noisy scores
         noisy_scores = self._get_noisy_scores(crashes)

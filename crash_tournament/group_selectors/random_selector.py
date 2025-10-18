@@ -15,8 +15,13 @@ class RandomSelector(Selector):
     """Random matchup selector - for testing/baseline."""
     
     def __init__(self, ranker: Ranker):
-        # Ranker not used but kept for interface consistency
-        # Future uncertainty selector will need it
+        """Initialize random selector.
+        
+        Args:
+            ranker: Ranker instance (not used by RandomSelector but kept for interface 
+                   consistency with future selectors like UncertaintySelector that will 
+                   need access to ranking data for intelligent selection)
+        """
         self.ranker = ranker
         from ..logging_config import get_logger
         self.logger = get_logger("random_selector")

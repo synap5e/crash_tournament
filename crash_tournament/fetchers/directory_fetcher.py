@@ -111,7 +111,12 @@ class DirectoryCrashFetcher(CrashFetcher):
         return list(self._cache.keys())
     
     def clear_cache(self) -> None:
-        """Clear the crash cache (for testing)."""
+        """Clear the crash cache and force reload on next access.
+        
+        This method resets the internal cache, causing crashes to be reloaded
+        from the directory on the next call to list_crashes() or get_crash().
+        Useful for refreshing data when files may have changed.
+        """
         self._cache.clear()
         self._cache_loaded = False
     

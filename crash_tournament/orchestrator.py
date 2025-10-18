@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from loguru import Logger
 
-from .interfaces import CrashFetcher, Judge, Storage, Ranker, Selector, SystemState
+from .interfaces import CrashFetcher, Judge, Storage, Ranker, Selector, SystemState, ConfigurationError
 from .models import Crash, OrdinalResult
 from .logging_config import get_logger
 
@@ -36,11 +36,11 @@ class RunConfig:
     def __post_init__(self):
         """Validate configuration."""
         if not (2 <= self.matchup_size <= 7):
-            raise ValueError(f"matchup_size must be between 2 and 7, got {self.matchup_size}")
+            raise ConfigurationError(f"matchup_size must be between 2 and 7, got {self.matchup_size}")
         if self.budget <= 0:
-            raise ValueError(f"budget must be positive, got {self.budget}")
+            raise ConfigurationError(f"budget must be positive, got {self.budget}")
         if self.max_workers <= 0:
-            raise ValueError(f"max_workers must be positive, got {self.max_workers}")
+            raise ConfigurationError(f"max_workers must be positive, got {self.max_workers}")
 
 
 class Orchestrator:
@@ -203,7 +203,7 @@ class Orchestrator:
                 
                 # Update ranker (main thread) - compute weight inline
                 if self.config.matchup_size <= 1:
-                    raise ValueError(f"matchup_size must be >= 2, got {self.config.matchup_size}")
+                    raise ConfigurationError(f"matchup_size must be >= 2, got {self.config.matchup_size}")
                 weight = 1.0 / (self.config.matchup_size - 1)
                 self.ranker.update_with_ordinal(result, weight=weight)
                 
