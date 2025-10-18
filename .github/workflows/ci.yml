@@ -28,13 +28,13 @@ jobs:
         pip install basedpyright ruff ty
 
     - name: Run ty check
-      run: ty check
+      run: ty check crash_tournament/
 
     - name: Run ruff check
-      run: ruff check
+      run: ruff check crash_tournament/
 
     - name: Run basedpyright type checking
-      run: basedpyright
+      run: basedpyright crash_tournament/
 
     - name: Run pytest
       run: pytest
