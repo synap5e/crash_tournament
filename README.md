@@ -1,7 +1,5 @@
 # Crash Tournament
 
-A TrueSkill-based ranking system for crash reports using comparative judging. Ranks crashes by exploitability with minimal LLM calls through comparative judging.
-
 ## Purpose
 
 This system ranks large sets of crash reports (hundreds to thousands) by likely exploitability. Instead of evaluating each crash individually, it compares small groups of crashes (typically 4 at a time) to build a global ranking using the TrueSkill algorithm.
@@ -86,72 +84,23 @@ uv run python -m crash_tournament.rank_crashes_demo \
 
 The system uses dependency injection to wire together swappable components:
 
-**Note:** The system automatically loads snapshots if they exist, so no manual `--resume` flag is needed.
 
-### Core Interfaces
-
-`CrashFetcher` — Abstract interface for crash data sources (not limited to files)
-- `list_crashes() -> Iterable[Crash]`: Returns all crashes
-- `get_crash(crash_id) -> Crash`: Fetch specific crash
-- Implementations:
-  - `DirectoryCrashFetcher`: Scans directory for crash files, extracts crash_id from parent directory name
-
-`Judge` — Compares a group of crashes and returns ranked order
-- `evaluate_matchup(crashes: Sequence[Crash]) -> OrdinalResult`: Returns ordered crash IDs
-- Implementations:
-  - `CursorAgentJudge`: Wraps `cursor-agent` CLI (blocking, single JSON response)
-    - Expected JSON schema: `{"ranked_ids": ["crash_1", "crash_2", ...], "rationale": "...", ...}`
-    - Parser extracts `ranked_ids` for `OrdinalResult.ordered_ids`, stores full JSON in `parsed_result`
-  - `CursorAgentStreamingJudge`: Streaming JSONL variant (--output-format=stream-json)
-  - `SimulatedJudge`: Synthetic judge with configurable noise for testing
-  - `DummyJudge`: Deterministic/random responses for testing
-
-`Storage` — Persists observations and system snapshots
-- `persist_matchup_result(res: OrdinalResult)`: Append observation
-- `load_observations() -> Iterable[OrdinalResult]`: Load all observations
-- `save_snapshot(state: dict)`: Save system state (idempotent)
-- `load_snapshot() -> Optional[dict]`: Restore state
-- Implementations:
-  - `JSONLStorage`: JSONL for observations, JSON for snapshots
-- Reproducibility: Each observation includes `timestamp` and `raw_output`; no deduplication (groups may be re-evaluated)
-
-`Ranker` — Maintains TrueSkill ratings and statistics
-- `update_with_ordinal(res: OrdinalResult, weight: float)`: Update ratings from comparison
-- `get_score(crash_id) -> float`: Get mu (skill estimate)
-- `get_uncertainty(crash_id) -> float`: Get sigma (uncertainty)
-- `get_total_eval_count(crash_id) -> int`: Total evaluation count
-- `get_win_percentage(crash_id) -> float`: Win rate across all matches
-- `get_average_ranking(crash_id) -> float`: Average position in evaluated groups
-- `snapshot() -> dict` / `load_snapshot(state: dict)`: Serialize/deserialize state
-- Implementation: `TrueSkillRanker` (k-way → k-1 pairwise conversions, configurable weight parameter, default 1/(k-1))
-
-
-`Selector` — Decides which crash groups to evaluate next
-- `select_matchup(all_crash_ids: Sequence[str], matchup_size: int) -> Sequence[str] | None`: Generate single matchup
-- Current implementation: `RandomSelector` (random matchup selection)
-
-`Orchestrator` — Main control loop
-- Wires all components via dependency injection
-- Generates matchups continuously
-- Manages thread pool for concurrent judge calls
-- Thread safety: Ranker updates and Storage writes are serialized; only Judge.evaluate_matchup calls run in parallel
-- Handles snapshotting and restart logic
-- Enforces budget and stopping conditions
+See [Architecture Documentation](docs/architecture.md) for detailed interface specifications.
 
 ### Data Flow
 
 **Flow:**
-1. **Orchestrator** gets crash IDs from **CrashFetcher**
-2. **Selector** generates matchups (currently random, future: uncertainty-based)
-3. **Orchestrator** calls **Judge** (in thread pool) to rank each group
-4. **Judge** results persisted via **Storage** and fed to **Ranker**
-5. **Ranker** updates TrueSkill ratings (μ/σ) using k-way→pairwise conversion
+1. [Orchestrator](docs/architecture.md#orchestrator) gets crash IDs from [CrashFetcher](docs/architecture.md#crashfetcher)
+2. [Selector](docs/architecture.md#selector) generates matchups (currently random, future: uncertainty-based)
+3. [Orchestrator](docs/architecture.md#orchestrator) calls [Judge](docs/architecture.md#judge) (in thread pool) to rank each group
+4. [Judge](docs/architecture.md#judge) results persisted via [Storage](docs/architecture.md#storage) and fed to [Ranker](docs/architecture.md#ranker)
+5. [Ranker](docs/architecture.md#ranker) updates TrueSkill ratings (μ/σ) using k-way→pairwise conversion
 6. Repeat until budget exhausted or convergence
-7. **Storage** enables snapshot/resume functionality
+7. [Storage](docs/architecture.md#storage) enables snapshot/resume functionality
 
 ## Selection Strategy
 
-Matchups are generated continuously until budget exhausted. (Current implementation: RandomSelector)
+Matchups are generated continuously until budget exhausted.
 
 ### In-Flight Crash Tracking
 
@@ -241,17 +190,7 @@ Set `--workers` based on your judge type: use 1 for sequential execution (defaul
 
 ## Data Models
 
-`Crash` — Black-box crash representation
-- `crash_id: str` — Unique identifier (current fetcher extracts from parent directory name)
-- `file_path: str` — Path to crash file (judge reads this)
-- `timestamp: float` — Creation time
-
-`OrdinalResult` — Judge evaluation output
-- `ordered_ids: List[str]` — Crash IDs ranked most→least exploitable
-- `raw_output: str` — Raw judge output for audit
-- `parsed_result: dict` — Structured data from judge
-- `timestamp: float` — Evaluation time
-- `judge_id: str` — Judge identifier
+See [Architecture Documentation](docs/architecture.md#data-models) for detailed data model specifications.
 
 ## Directory Structure
 
@@ -282,19 +221,7 @@ crash_tournament/
 
 ## Testing
 
-```bash
-# Run all tests
-uv run python -m pytest tests/ -v
-
-# Run specific test suites
-uv run python -m pytest tests/test_trueskill_ranker.py -v
-uv run python -m pytest tests/test_random_selector.py -v
-uv run python -m pytest tests/test_integration.py -v
-```
-
-Test coverage:
-- ✓ Unit tests: TrueSkill ranker, random selector, JSONL storage
-- ✓ Integration tests: End-to-end tournament, snapshot resume
+See [Testing Documentation](docs/testing.md) for test commands and coverage details.
 
 ## Ranked Directory and Symlinks
 
@@ -363,72 +290,10 @@ This applies to all judge types (LLM-based, simulated, dummy, etc.).
 uv sync  # Install all dependencies
 ```
 
-## Future Research Directions (Not Yet Implemented)
+## Documentation
 
-### Grouping Strategy Optimization
+- [Architecture](docs/architecture.md) - Core interfaces and component specifications
+- [Testing](docs/testing.md) - Test commands and coverage details  
+- [Future Research](docs/future-research.md) - Research directions and optimization opportunities
 
-The current system uses **random selection** for matchup generation. This provides a solid baseline, but there are several areas for potential improvement:
-
-#### **Investigation Areas**
-
-1. **Similar-Skill Grouping (delta_mu)**
-   - **Hypothesis**: Grouping crashes with similar skill levels (μ values) may produce more informative comparisons
-   - **Current Implementation**: Uses random selection for all matchups
-   - **Proposed Change**: Add `delta_mu` parameter to group crashes within score threshold (|μ₁ - μ₂| ≤ delta_mu)
-   - **Metrics**: Compare convergence speed and ranking quality vs random grouping
-   - **Rationale for current approach**: Random grouping is simpler and provides good exploration; unclear if nearby-μ grouping provides significant benefits
-
-2. **Uncertainty-Based Grouping**
-   - **Hypothesis**: Grouping high-uncertainty crashes together may be more informative than mixing with random crashes
-   - **Implementation**: Select groups of highest-σ crashes for direct uncertainty resolution
-   - **Metrics**: Measure uncertainty reduction per evaluation
-
-3. **Adaptive Grouping Strategies**
-   - **Hypothesis**: Different grouping strategies may be optimal at different tournament phases
-   - **Implementation**: Use random grouping early, uncertainty-based grouping late
-   - **Metrics**: Track convergence curves for different strategies
-
-4. **Balanced Grouping**
-   - **Hypothesis**: Mixing high-uncertainty with medium-uncertainty crashes may provide better information gain
-   - **Implementation**: Weighted selection combining uncertainty and diversity
-   - **Metrics**: Information-theoretic measures of comparison value
-
-#### **Research Methodology**
-
-To investigate these approaches:
-
-1. **A/B Testing**: Run tournaments with different grouping strategies on identical crash sets
-2. **Convergence Analysis**: Measure ranking quality vs evaluation count
-3. **Information Gain**: Quantify the informativeness of different comparison types
-4. **Statistical Significance**: Use proper statistical tests to validate improvements
-
-#### **Implementation Strategy**
-
-- **Experimental Branch**: Implement new strategies in feature branches
-- **Metrics Collection**: Add detailed logging of grouping decisions and outcomes
-- **Benchmarking**: Use standardized crash sets for consistent comparison
-- **Gradual Rollout**: Test on small tournaments before large-scale deployment
-
-**Note**: Any new grouping strategies should demonstrate statistically significant improvements in convergence speed or ranking quality before being merged to master.
-
-### Uncertainty-Based Stopping Conditions
-
-Currently, tournaments run until budget is exhausted. An alternative approach would be to stop when uncertainty converges below a threshold.
-
-**Potential Implementation:**
-- Add `--uncertainty-threshold` CLI parameter
-- Check average uncertainty in `_check_stopping_conditions()`
-- Stop when `avg_uncertainty < threshold`
-
-**Research Questions:**
-- What threshold value indicates sufficient convergence?
-- Should we use average uncertainty, max uncertainty, or top-k uncertainty?
-- How does early stopping affect ranking quality vs evaluation cost?
-
-**Trade-offs:**
-- Pro: Saves evaluations when rankings have converged
-- Con: May stop prematurely if uncertainty reduction is non-monotonic
-- Con: Adds complexity to stopping logic
-
-This feature was deliberately not implemented to keep the system simple and predictable. Budget-based stopping is easier to reason about and ensures consistent evaluation effort across runs.
 

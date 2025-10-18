@@ -17,6 +17,7 @@ dependencies = [
     "typing_extensions>=4.0.0",
     "matplotlib>=3.10.7",
     "pydantic>=2.12.3",
+    "scipy>=1.16.2",
 ]
 
 [project.optional-dependencies]

@@ -21,7 +21,7 @@ class DummyJudge(Judge):
     Provides deterministic or random ranking based on crash IDs.
     """
 
-    def __init__(self, mode: str = "deterministic", seed: int = 42):
+    def __init__(self, mode: str = "random", seed: int = 42):
         """
         Initialize dummy judge.
 

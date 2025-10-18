@@ -211,7 +211,7 @@ def wire_components(
             f"Simulated judge created with {len(ground_truth)} crashes, noise={args.noise}"
         )
     elif args.judge_type == "dummy":
-        judge = DummyJudge(mode="deterministic")
+        judge = DummyJudge(mode="random")
         logger.info("Dummy judge created")
     elif args.judge_type == "cursor-agent":
         judge = CursorAgentJudge(timeout=args.agent_timeout)
