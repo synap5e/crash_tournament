@@ -140,34 +140,6 @@ The system uses dependency injection to wire together swappable components:
 
 ### Data Flow
 
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   CrashFetcher  │───▶│   Orchestrator  │───▶│    Selector     │
-│                 │    │                 │    │                 │
-│ • DirectoryScan │    │ • Main Loop     │    │ • RandomSelect  │
-│ • Load Crashes  │    │ • Thread Pool   │    │ • Future:       │
-│                 │    │ • Budget Mgmt   │    │   Uncertainty   │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-                                │                       │
-                                ▼                       ▼
-                       ┌─────────────────┐    ┌─────────────────┐
-                       │     Ranker      │◀───│     Storage     │
-                       │                 │    │                 │
-                       │ • TrueSkill     │    │ • JSONL Obs     │
-                       │ • k-way→pairwise│    │ • JSON Snapshots│
-                       │ • μ/σ tracking  │    │ • Resume State  │
-                       └─────────────────┘    └─────────────────┘
-                                ▲                       ▲
-                                │                       │
-                       ┌─────────────────┐              │
-                       │      Judge      │──────────────┘
-                       │                 │
-                       │ • cursor-agent  │
-                       │ • Simulated     │
-                       │ • Streaming     │
-                       └─────────────────┘
-```
-
 **Flow:**
 1. **Orchestrator** gets crash IDs from **CrashFetcher**
 2. **Selector** generates matchups (currently random, future: uncertainty-based)

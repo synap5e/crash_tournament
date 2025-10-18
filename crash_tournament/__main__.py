@@ -191,7 +191,7 @@ def wire_components(args: CLIArgs) -> tuple[
     logger.info("Creating storage")
     output_dir = Path(args["output_dir"])
     observations_path = output_dir / "observations.jsonl"
-    snapshot_path = output_dir / "snapshot.json"
+    snapshot_path = output_dir / "latest_snapshot.json"
     storage = JSONLStorage(observations_path, snapshot_path)
     
     # Create ranker
@@ -308,7 +308,7 @@ def main() -> None:
         print(f"Crashes directory: {args['crashes_dir']}")
         print(f"Output directory: {args['output_dir']}")
         print(f"Matchup size: {args['matchup_size']}")
-        print(f"Snapshot every: {args['snapshot_every']}")
+        print(f"Progress every: {args['snapshot_every']} (snapshots saved on every update)")
         print(f"Budget: {args['budget']}")
         print(f"Workers: {args['workers']}")
         print(f"Judge type: {args['judge_type']}")

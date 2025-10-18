@@ -31,7 +31,7 @@ class RunConfig:
     matchup_size: int = 4  # crashes per matchup, validate 2 ≤ size ≤ 7
     budget: int = 1000  # total matchup evaluations allowed
     max_workers: int = 4  # thread pool size
-    snapshot_every: int = 10  # save snapshot every N matchups
+    snapshot_every: int = 10  # print progress every N matchups (snapshots saved on every update)
     
     def __post_init__(self):
         """Validate configuration."""
@@ -160,6 +160,9 @@ class Orchestrator:
             self.logger.info(f"Draining {len(futures)} remaining futures")
             self._process_completed_futures(futures, wait_all=True)
         
+        # Save final snapshot
+        self._save_snapshot()
+        
         self.logger.info(f"Tournament complete: {self.evaluated_matchups} matchups evaluated")
         print(f"Tournament complete: {self.evaluated_matchups} matchups evaluated")
         return self._get_final_rankings()
@@ -217,9 +220,11 @@ class Orchestrator:
                 
                 self.logger.info(f"Completed matchup {self.evaluated_matchups}/{self.config.budget}: {matchup_ids}")
                 
-                # Snapshot every N evaluations
+                # Snapshot on every update for complete historical record
+                self._save_snapshot()
+                
+                # Print progress every N evaluations
                 if self.evaluated_matchups % self.config.snapshot_every == 0:
-                    self._save_snapshot()
                     self._print_progress()
                 
                 # Check for milestones (every MILESTONE_INTERVAL)

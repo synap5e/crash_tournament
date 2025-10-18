@@ -21,7 +21,7 @@ class TestJSONLStorage:
         with tempfile.TemporaryDirectory() as temp_dir:
             # Arrange
             observations_path = Path(temp_dir) / "observations.jsonl"
-            snapshot_path = Path(temp_dir) / "snapshot.json"
+            snapshot_path = Path(temp_dir) / "latest_snapshot.json"
             storage = JSONLStorage(observations_path, snapshot_path)
             
             result = OrdinalResult(
@@ -31,7 +31,7 @@ class TestJSONLStorage:
             )
             
             # Act
-            storage.persist_ordinal(result)
+            storage.persist_matchup_result(result)
             loaded_results = list(storage.load_observations())
             
             # Assert
@@ -47,7 +47,7 @@ class TestJSONLStorage:
         with tempfile.TemporaryDirectory() as temp_dir:
             # Arrange
             observations_path = Path(temp_dir) / "observations.jsonl"
-            snapshot_path = Path(temp_dir) / "snapshot.json"
+            snapshot_path = Path(temp_dir) / "latest_snapshot.json"
             storage = JSONLStorage(observations_path, snapshot_path)
             
             results = [
@@ -65,7 +65,7 @@ class TestJSONLStorage:
             
             # Act
             for result in results:
-                storage.persist_ordinal(result)
+                storage.persist_matchup_result(result)
             
             loaded_results = list(storage.load_observations())
             
@@ -79,12 +79,28 @@ class TestJSONLStorage:
         with tempfile.TemporaryDirectory() as temp_dir:
             # Arrange
             observations_path = Path(temp_dir) / "observations.jsonl"
-            snapshot_path = Path(temp_dir) / "snapshot.json"
+            snapshot_path = Path(temp_dir) / "latest_snapshot.json"
             storage = JSONLStorage(observations_path, snapshot_path)
             
             test_state = {
-                "crash_a": {"mu": 30.0, "sigma": 5.0},
-                "crash_b": {"mu": 20.0, "sigma": 6.0},
+                "ranker_state": {
+                    "ratings": {
+                        "crash_a": {"mu": 30.0, "sigma": 5.0},
+                        "crash_b": {"mu": 20.0, "sigma": 6.0},
+                    },
+                    "statistics": {
+                        "eval_counts": {"crash_a": 1, "crash_b": 1},
+                        "win_counts": {"crash_a": 1, "crash_b": 0},
+                        "rankings": {"crash_a": [1], "crash_b": [2]},
+                        "group_sizes": {"crash_a": [2], "crash_b": [2]},
+                    }
+                },
+                "runtime_state": {
+                    "evaluated_matchups": 1,
+                    "total_evaluations": 1,
+                    "failed_evaluations": 0,
+                    "last_milestone": 0,
+                }
             }
             
             # Act
@@ -105,7 +121,7 @@ class TestJSONLStorage:
         with tempfile.TemporaryDirectory() as temp_dir:
             # Arrange
             observations_path = Path(temp_dir) / "observations.jsonl"
-            snapshot_path = Path(temp_dir) / "snapshot.json"
+            snapshot_path = Path(temp_dir) / "latest_snapshot.json"
             storage = JSONLStorage(observations_path, snapshot_path)
             
             result = OrdinalResult(
@@ -113,7 +129,7 @@ class TestJSONLStorage:
                 raw_output="test",
                 parsed_result={"rationale_top": "a wins"},
             )
-            storage.persist_ordinal(result)
+            storage.persist_matchup_result(result)
             
             # Act - manually corrupt the file
             with open(observations_path, "a") as f:
@@ -129,7 +145,7 @@ class TestJSONLStorage:
         with tempfile.TemporaryDirectory() as temp_dir:
             # Arrange
             observations_path = Path(temp_dir) / "nonexistent_observations.jsonl"
-            snapshot_path = Path(temp_dir) / "nonexistent_snapshot.json"
+            snapshot_path = Path(temp_dir) / "nonexistent_latest_snapshot.json"
             storage = JSONLStorage(observations_path, snapshot_path)
             
             # Act
@@ -145,7 +161,7 @@ class TestJSONLStorage:
         with tempfile.TemporaryDirectory() as temp_dir:
             # Arrange
             observations_path = Path(temp_dir) / "observations.jsonl"
-            snapshot_path = Path(temp_dir) / "snapshot.json"
+            snapshot_path = Path(temp_dir) / "latest_snapshot.json"
             storage = JSONLStorage(observations_path, snapshot_path)
             
             # Act & Assert
@@ -158,7 +174,7 @@ class TestJSONLStorage:
                     raw_output=f"test{i}",
                     parsed_result={"rationale_top": f"a{i} wins"},
                 )
-                storage.persist_ordinal(result)
+                storage.persist_matchup_result(result)
             
             assert storage.get_observation_count() == 3, "Should count 3 observations"
     
@@ -167,7 +183,7 @@ class TestJSONLStorage:
         with tempfile.TemporaryDirectory() as temp_dir:
             # Arrange
             observations_path = Path(temp_dir) / "observations.jsonl"
-            snapshot_path = Path(temp_dir) / "snapshot.json"
+            snapshot_path = Path(temp_dir) / "latest_snapshot.json"
             storage = JSONLStorage(observations_path, snapshot_path)
             
             # Add some data
@@ -176,7 +192,7 @@ class TestJSONLStorage:
                 raw_output="test",
                 parsed_result={"rationale_top": "a wins"},
             )
-            storage.persist_ordinal(result)
+            storage.persist_matchup_result(result)
             assert storage.get_observation_count() == 1
             
             # Act
@@ -191,11 +207,27 @@ class TestJSONLStorage:
         with tempfile.TemporaryDirectory() as temp_dir:
             # Arrange
             observations_path = Path(temp_dir) / "observations.jsonl"
-            snapshot_path = Path(temp_dir) / "snapshot.json"
+            snapshot_path = Path(temp_dir) / "latest_snapshot.json"
             storage = JSONLStorage(observations_path, snapshot_path)
             
             # Add snapshot
-            test_state = {"test": {"mu": 25.0, "sigma": 8.0}}
+            test_state = {
+                "ranker_state": {
+                    "ratings": {"test": {"mu": 25.0, "sigma": 8.0}},
+                    "statistics": {
+                        "eval_counts": {"test": 1},
+                        "win_counts": {"test": 1},
+                        "rankings": {"test": [1]},
+                        "group_sizes": {"test": [2]},
+                    }
+                },
+                "runtime_state": {
+                    "evaluated_matchups": 1,
+                    "total_evaluations": 1,
+                    "failed_evaluations": 0,
+                    "last_milestone": 0,
+                }
+            }
             storage.save_snapshot(test_state)
             assert snapshot_path.exists()
             
@@ -211,7 +243,7 @@ class TestJSONLStorage:
         with tempfile.TemporaryDirectory() as temp_dir:
             # Arrange
             observations_path = Path(temp_dir) / "observations.jsonl"
-            snapshot_path = Path(temp_dir) / "snapshot.json"
+            snapshot_path = Path(temp_dir) / "latest_snapshot.json"
             storage = JSONLStorage(observations_path, snapshot_path)
             
             result = OrdinalResult(
@@ -221,7 +253,7 @@ class TestJSONLStorage:
             )
             
             # Act
-            storage.persist_ordinal(result)
+            storage.persist_matchup_result(result)
             
             # Assert - check raw file content
             with open(observations_path, "r") as f:
@@ -229,7 +261,6 @@ class TestJSONLStorage:
                 data = json.loads(line)
                 
                 assert "timestamp" in data, "Should include timestamp"
-                assert "checksum" in data, "Should include checksum"
                 assert "ordered_ids" in data, "Should include original data"
                 assert data["ordered_ids"] == ["a", "b"]
     
@@ -238,10 +269,26 @@ class TestJSONLStorage:
         with tempfile.TemporaryDirectory() as temp_dir:
             # Arrange
             observations_path = Path(temp_dir) / "observations.jsonl"
-            snapshot_path = Path(temp_dir) / "snapshot.json"
+            snapshot_path = Path(temp_dir) / "latest_snapshot.json"
             storage = JSONLStorage(observations_path, snapshot_path)
             
-            test_state = {"test": {"mu": 25.0, "sigma": 8.0}}
+            test_state = {
+                "ranker_state": {
+                    "ratings": {"test": {"mu": 25.0, "sigma": 8.0}},
+                    "statistics": {
+                        "eval_counts": {"test": 1},
+                        "win_counts": {"test": 1},
+                        "rankings": {"test": [1]},
+                        "group_sizes": {"test": [2]},
+                    }
+                },
+                "runtime_state": {
+                    "evaluated_matchups": 1,
+                    "total_evaluations": 1,
+                    "failed_evaluations": 0,
+                    "last_milestone": 0,
+                }
+            }
             
             # Act
             storage.save_snapshot(test_state)
@@ -250,6 +297,6 @@ class TestJSONLStorage:
             with open(snapshot_path, "r") as f:
                 data = json.load(f)
                 
-                assert "checksum" in data, "Should include checksum"
-                assert "test" in data, "Should include original data"
-                assert data["test"] == {"mu": 25.0, "sigma": 8.0}
+                assert "ranker_state" in data, "Should include ranker_state"
+                assert "runtime_state" in data, "Should include runtime_state"
+                assert data["ranker_state"]["ratings"]["test"] == {"mu": 25.0, "sigma": 8.0}

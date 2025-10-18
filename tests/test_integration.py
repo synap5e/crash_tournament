@@ -76,7 +76,7 @@ class TestIntegration:
             fetcher = DirectoryCrashFetcher(crashes_dir)
             storage = JSONLStorage(
                 output_dir / "observations.jsonl",
-                output_dir / "snapshot.json"
+                output_dir / "latest_snapshot.json"
             )
             ranker = TrueSkillRanker()
             selector = RandomSelector(ranker)
@@ -162,7 +162,7 @@ class TestIntegration:
             fetcher = DirectoryCrashFetcher(crashes_dir)
             storage = JSONLStorage(
                 output_dir / "observations.jsonl",
-                output_dir / "snapshot.json"
+                output_dir / "latest_snapshot.json"
             )
             ranker = TrueSkillRanker()
             selector = RandomSelector(ranker)
@@ -250,7 +250,7 @@ class TestIntegration:
             fetcher = DirectoryCrashFetcher(crashes_dir)
             storage = JSONLStorage(
                 output_dir / "observations.jsonl",
-                output_dir / "snapshot.json"
+                output_dir / "latest_snapshot.json"
             )
             
             # Clear ground truth with clear ordering (using directory names as crash IDs)
@@ -347,7 +347,7 @@ class TestIntegration:
             fetcher = DirectoryCrashFetcher(crashes_dir)
             storage = JSONLStorage(
                 output_dir / "observations.jsonl",
-                output_dir / "snapshot.json"
+                output_dir / "latest_snapshot.json"
             )
             ranker = TrueSkillRanker()
             selector = RandomSelector(ranker)
@@ -417,7 +417,7 @@ class TestIntegration:
             fetcher = DirectoryCrashFetcher(crashes_dir)
             storage = JSONLStorage(
                 output_dir / "observations.jsonl",
-                output_dir / "snapshot.json"
+                output_dir / "latest_snapshot.json"
             )
             ranker = TrueSkillRanker()
             selector = RandomSelector(ranker)
@@ -486,7 +486,7 @@ class TestIntegration:
             fetcher = DirectoryCrashFetcher(crashes_dir)
             storage = JSONLStorage(
                 output_dir / "observations.jsonl",
-                output_dir / "snapshot.json"
+                output_dir / "latest_snapshot.json"
             )
             ranker = TrueSkillRanker()
             selector = RandomSelector(ranker)
