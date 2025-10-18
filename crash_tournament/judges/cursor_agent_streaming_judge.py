@@ -8,13 +8,14 @@ Provides real-time progress updates during agent execution.
 import json
 import subprocess
 import time
-from typing import Any, cast, override
+from typing import Any, cast
+from typing_extensions import override
 
 from .cursor_agent_judge import (
     CursorAgentJudge,
     NoJsonFromCursorAgentError
 )
-from ..interfaces import ValidationError
+from ..models import ValidationError
 
 
 

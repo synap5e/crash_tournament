@@ -6,9 +6,10 @@ Samples k-way orderings from latent scores with noise parameter for testing.
 
 import random
 from collections.abc import Sequence
-from typing import override
+from typing_extensions import override
 
-from ..interfaces import Judge, ValidationError
+from ..interfaces import Judge
+from ..models import ValidationError
 from ..models import Crash, OrdinalResult
 
 

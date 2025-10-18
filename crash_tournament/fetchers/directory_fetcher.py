@@ -4,9 +4,10 @@ Directory crash fetcher implementation.
 Reads crashes from directory structure with JSON files.
 """
 
+import json
 from pathlib import Path
 from collections.abc import Iterable
-from typing import override
+from typing_extensions import override
 
 from ..interfaces import CrashFetcher
 from ..models import Crash
@@ -69,9 +70,18 @@ class DirectoryCrashFetcher(CrashFetcher):
             if crash_file.is_dir():
                 continue
                 
-            # Extract crash_id from parent directory name and file stem for unique identification
-            # This prevents collisions when multiple files exist in the same directory
-            crash_id = f"{crash_file.parent.name}_{crash_file.stem}"
+            try:
+                # Try to read crash_id from JSON file content
+                with open(crash_file, 'r') as f:
+                    data = json.load(f)
+                    if 'crash_id' in data:
+                        crash_id = data['crash_id']
+                    else:
+                        # Fallback to directory name and file stem
+                        crash_id = f"{crash_file.parent.name}_{crash_file.stem}"
+            except (json.JSONDecodeError, KeyError, FileNotFoundError):
+                # Fallback to directory name and file stem if JSON parsing fails
+                crash_id = f"{crash_file.parent.name}_{crash_file.stem}"
             
             # Create Crash object with absolute file path
             crash = Crash(

@@ -6,9 +6,10 @@ Provides deterministic and random ranking for testing purposes.
 
 import random
 from collections.abc import Sequence
-from typing import override
+from typing_extensions import override
 
-from ..interfaces import Judge, ValidationError
+from ..interfaces import Judge
+from ..models import ValidationError
 from ..models import Crash, OrdinalResult
 
 

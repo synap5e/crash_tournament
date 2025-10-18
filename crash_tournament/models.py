@@ -8,7 +8,10 @@ from dataclasses import dataclass, field
 from typing import Any
 import time
 
-from .interfaces import ValidationError
+
+class ValidationError(Exception):
+    """Base exception for validation-related errors."""
+    pass
 
 
 @dataclass

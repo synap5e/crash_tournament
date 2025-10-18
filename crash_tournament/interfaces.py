@@ -5,7 +5,7 @@ All interfaces are synchronous to avoid asyncio complexity in core interfaces.
 """
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Sequence
 from typing import TypedDict
 from .models import Crash, OrdinalResult
 
@@ -35,9 +35,6 @@ class JudgeError(Exception):
     pass
 
 
-class ValidationError(Exception):
-    """Base exception for validation-related errors."""
-    pass
 
 
 class ConfigurationError(Exception):

@@ -8,7 +8,6 @@ import json
 import tempfile
 from pathlib import Path
 
-import pytest
 from crash_tournament.storage.jsonl_storage import JSONLStorage
 from crash_tournament.models import OrdinalResult
 

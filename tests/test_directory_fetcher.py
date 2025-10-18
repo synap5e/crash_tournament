@@ -10,7 +10,6 @@ from pathlib import Path
 
 import pytest
 from crash_tournament.fetchers.directory_fetcher import DirectoryCrashFetcher
-from crash_tournament.models import Crash
 
 
 class TestDirectoryCrashFetcher:
