@@ -77,11 +77,10 @@ uv run python -m crash_tournament \
 - `--crashes-pattern`: Pattern for finding crash files (default: `*.json`)
 - `--output-dir`: Directory for JSONL/snapshots output (required)
 - `--judge-type`: Judge type (`simulated`, `dummy`, `cursor-agent`, `cursor-agent-streaming`)
-- `--matchup-size`: Number of crashes per matchup (default: 4)
+- `--matchup-size`: Number of crashes per matchup (default: 4, must be between 2 and 7)
 - `--budget`: Total number of matchup evaluations (default: matchup_size * 250)
 - `--snapshot-every`: Save snapshot every N matchups (default: 10)
 - `--workers`: Number of worker threads (default: 1)
-- `--debug`: Enable debug logging
 
 ## Architecture
 
@@ -187,7 +186,6 @@ Matchups are generated continuously until budget exhausted. (Current implementat
 The orchestrator prevents the same crash from being evaluated in multiple concurrent matchups. Before generating a new matchup, crashes currently being judged are filtered out of the available pool. This ensures:
 
 - No crash appears in multiple simultaneous evaluations
-- Future uncertainty-based selectors won't repeatedly select the same high-uncertainty crash across parallel workers
 - Each evaluation's results can update the crash's rating before it's selected again
 
 This design trades some parallelism (workers may idle when few crashes are available) for more efficient information gathering from each evaluation.
@@ -325,7 +323,6 @@ uv run python -m pytest tests/test_integration.py -v
 Test coverage:
 - ✓ Unit tests: TrueSkill ranker, random selector, JSONL storage
 - ✓ Integration tests: End-to-end tournament, snapshot resume
-- ✗ Missing: Orchestrator unit tests (placeholder file only)
 
 ## Ranked Directory and Symlinks
 
@@ -333,7 +330,6 @@ The system creates a `ranked/` directory in the output folder containing symboli
 
 When created:
 - At tournament completion: Final ranked directory created with all crashes
-- On resume: Directory recreated when resuming from snapshots
 
 Symlink format:
 ```

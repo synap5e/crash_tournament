@@ -167,16 +167,21 @@ class CursorAgentJudge(Judge):
         self.logger.debug(f"Full prompt: {prompt}")
         
         # Run cursor-agent
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=self.timeout,
-            check=True
-        )
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=self.timeout,
+                check=True
+            )
+        except subprocess.CalledProcessError as e:
+            self.logger.error(f"cursor-agent failed with exit code {e.returncode}")
+            self.logger.error(f"stderr: {e.stderr}")
+            raise CursorAgentJudgeError(f"cursor-agent execution failed: {e.stderr}") from e
         
         self.logger.info(f"cursor-agent completed successfully, output length: {len(result.stdout)} chars")
-        self.logger.info(f"Full agent output: {result.stdout}")
+        self.logger.debug(f"Full agent output: {result.stdout}")
         
         # Parse and log agent activities retroactively for better visibility
         self._log_agent_activities(result.stdout)

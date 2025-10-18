@@ -144,7 +144,7 @@ def validate_config(args: CLIArgs) -> None:
     """Validate configuration parameters."""
     logger = get_logger("validate_config")
     
-    # Check matchup_size range per doc line 9
+    # Check matchup_size range (2-7 for reasonable tournament sizes)
     if not (2 <= args["matchup_size"] <= 7):
         logger.error(f"matchup_size must be between 2 and 7, got {args['matchup_size']}")
         print(f"Error: matchup_size must be between 2 and 7, got {args['matchup_size']}")

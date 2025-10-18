@@ -212,7 +212,7 @@ Examples:
         print("METADATA")
         print("=" * 80)
         print(f"Judge ID: {result.judge_id}")
-        print(f"Group size: {result.group_size}")
+        print(f"Group size: {len(result.ordered_ids)}")
         print(f"Timestamp: {result.timestamp}")
         print()
         

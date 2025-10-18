@@ -113,7 +113,9 @@ class TrueSkillRanker(Ranker):
                 adjusted_tau = self.tau * weight if weight > 0 else self.tau
                 
                 # Update ratings with adjusted tau
-                # Temporarily adjust tau for this update
+                # NOTE: This modifies global TrueSkill state, which can cause race conditions
+                # in concurrent usage. Consider using thread-local storage or instance-based
+                # configuration for thread safety.
                 original_tau = self.tau
                 _ = setup(mu=self.mu, sigma=self.sigma, tau=adjusted_tau)
                 

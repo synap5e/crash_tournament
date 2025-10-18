@@ -18,10 +18,10 @@ from .models import Crash, OrdinalResult
 from .logging_config import get_logger
 
 # Constants for failure threshold logic
-EARLY_ABORT_THRESHOLD = 4
-LATE_ABORT_THRESHOLD = 50
-FAILURE_RATE_LIMIT = 0.2
-MILESTONE_INTERVAL = 50
+EARLY_ABORT_THRESHOLD = 4      # Abort if 100% of first 4 evaluations fail
+LATE_ABORT_THRESHOLD = 50     # Only check failure rate after 50+ evaluations
+FAILURE_RATE_LIMIT = 0.2      # Abort if >20% failure rate after threshold
+MILESTONE_INTERVAL = 1        # Print milestone updates every 1 evaluation
 
 
 @dataclass
@@ -174,7 +174,17 @@ class Orchestrator:
         self.last_milestone = runtime_state.get('last_milestone', 0)
 
     def _process_completed_futures(self, futures: dict[Future[OrdinalResult], tuple[Sequence[str], list[Crash]]], wait_all: bool = False) -> None:
-        """Process completed futures and update state (main thread only)."""
+        """
+        Process completed futures and update state (main thread only).
+        
+        This method handles the results from worker threads, updating the ranker,
+        storage, and in-flight tracking. It's called from the main thread to ensure
+        thread safety. Workers are read-only and only return results.
+        
+        Args:
+            futures: Dictionary mapping futures to their matchup data
+            wait_all: If True, process all futures; if False, only process completed ones
+        """
         done_futures = []
         
         if wait_all:
@@ -192,6 +202,8 @@ class Orchestrator:
                 self.storage.persist_matchup_result(result)
                 
                 # Update ranker (main thread) - compute weight inline
+                if self.config.matchup_size <= 1:
+                    raise ValueError(f"matchup_size must be >= 2, got {self.config.matchup_size}")
                 weight = 1.0 / (self.config.matchup_size - 1)
                 self.ranker.update_with_ordinal(result, weight=weight)
                 
